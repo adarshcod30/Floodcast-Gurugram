@@ -22,6 +22,8 @@ from cachetools import TTLCache
 
 from app.core import data_loader
 
+from app.config import settings
+
 logger = logging.getLogger("floodcast.geocoding")
 
 # Cache for Nominatim results (24h TTL, max 100 entries)
@@ -153,8 +155,15 @@ def _nominatim_geocode(name: str) -> Optional[Dict[str, Any]]:
             "limit": 1,
             "addressdetails": 1,
         }
+        # Nominatim's usage policy requires a descriptive User-Agent with
+        # a REAL contact, and it returns 403 for obvious placeholders
+        # such as example.com. Set NOMINATIM_CONTACT to a working
+        # address before relying on this fallback in production.
         headers = {
-            "User-Agent": "FloodCastGurugram/1.0 (contact: floodcast@example.com)",
+            "User-Agent": (
+                f"FloodCastGurugram/2.0 (+https://github.com/floodcast-gurugram; "
+                f"{settings.nominatim_contact})"
+            ),
         }
 
         with httpx.Client(timeout=10.0) as client:

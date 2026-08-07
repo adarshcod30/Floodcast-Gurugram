@@ -8,6 +8,7 @@ extraction from natural language.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -64,9 +65,16 @@ async def run_route_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         )
         return state
 
-    # Step 2: Resolve to coordinates
-    origin = resolve_place(origin_name)
-    dest = resolve_place(dest_name)
+    # Step 2: Resolve to coordinates.
+    #
+    # resolve_place() may fall through to Nominatim, which does a
+    # blocking HTTP call and a 1s rate-limit sleep. Run it on a worker
+    # thread — calling it inline would stall the event loop, freezing
+    # every other in-flight request for the duration.
+    origin, dest = await asyncio.gather(
+        asyncio.to_thread(resolve_place, origin_name),
+        asyncio.to_thread(resolve_place, dest_name),
+    )
 
     state["origin_resolved"] = origin
     state["destination_resolved"] = dest
@@ -129,24 +137,77 @@ async def _extract_places(query: str) -> tuple[str, str]:
     return _regex_extract_places(query)
 
 
+# Leading phrases people put before the origin.
+_LEAD = re.compile(
+    r"^(?:is\s+it\s+safe|will\s+it\s+be\s+safe|can\s+i\s+(?:go|drive|get|travel)|"
+    r"how\s+(?:is|about)|what\s+about|route|driving|going|travelling|traveling|"
+    r"the|a|an)\b[\s,]*",
+    re.IGNORECASE,
+)
+
+# Trailing phrases people put after the destination. Time qualifiers
+# matter most: "… to Cyber City in the next hour" must resolve to
+# "Cyber City", or geocoding fails on a place name that includes a
+# clause about time.
+_TRAIL = re.compile(
+    r"[\s,]*(?:"
+    # "in / within / over the next 2 hours", "in the next few hours"
+    r"(?:in|within|over|for)\s+(?:the\s+)?next\s+(?:few\s+|couple\s+of\s+|\d+\s+)?"
+    r"(?:hour|hr|minute|min|day)s?|"
+    r"(?:in|within)\s+\d+\s*(?:hour|hr|minute|min)s?|"
+    # bare time references
+    r"right\s+now|just\s+now|now|today|tonight|this\s+(?:morning|afternoon|evening|hour)|"
+    r"at\s+the\s+moment|currently|later|"
+    # judgement words the user tacked on
+    r"safe(?:ly)?|risky|flooded|ok(?:ay)?|passable|clear|to\s+drive|to\s+go"
+    r")\b[\s,.?!]*$",
+    re.IGNORECASE,
+)
+
+# A trailing aside after a dash or comma — "MG Road — safe to drive?".
+# The place name is what precedes the punctuation.
+_ASIDE = re.compile(r"\s*[—–-]{1,2}\s+.*$")
+
+
+def _clean_place(text: str) -> str:
+    """Strip conversational scaffolding from an extracted place name.
+
+    Applied to both captured groups after matching, rather than encoding
+    every possible terminator into each pattern's lookahead. Trailing
+    qualifiers stack ("... in the next hour right now?"), so the trailing
+    pattern is applied repeatedly until it stops changing anything.
+    """
+    place = _LEAD.sub("", text.strip())
+    place = _ASIDE.sub("", place)
+    for _ in range(4):  # bounded: qualifiers stack, but not indefinitely
+        stripped = _TRAIL.sub("", place).strip()
+        if stripped == place:
+            break
+        place = stripped
+    return place.strip(" ,.?!—–")
+
+
 def _regex_extract_places(query: str) -> tuple[str, str]:
-    """Regex-based place extraction as fallback."""
-    patterns = [
-        re.compile(r"from\s+(.+?)\s+to\s+(.+?)(?:\s+in|\s+within|\s+next|$|\?)", re.IGNORECASE),
-        re.compile(r"between\s+(.+?)\s+and\s+(.+?)(?:\s+in|\s+within|\s+next|$|\?)", re.IGNORECASE),
-        re.compile(r"(.+?)\s+to\s+(.+?)(?:\s+route|\s+safe|\s+risky|\s+risk|$|\?)", re.IGNORECASE),
-    ]
+    """Extract origin and destination without an LLM.
+
+    This is the DEFAULT path, not merely a fallback: with no AWS
+    credentials configured the agent never calls Haiku, so these
+    patterns are what most users actually hit.
+    """
+    patterns = (
+        re.compile(r"\bfrom\s+(.+?)\s+to\s+(.+)$", re.IGNORECASE),
+        re.compile(r"\bbetween\s+(.+?)\s+and\s+(.+)$", re.IGNORECASE),
+        re.compile(r"^(.+?)\s+to\s+(.+)$", re.IGNORECASE),
+    )
 
     for pattern in patterns:
         match = pattern.search(query)
-        if match:
-            groups = match.groups()
-            if len(groups) >= 2:
-                origin = groups[0].strip()
-                dest = groups[1].strip()
-                # Clean up
-                origin = re.sub(r"^(the|a|an|is it safe|can i go)\s+", "", origin, flags=re.IGNORECASE).strip()
-                if origin and dest:
-                    return origin, dest
+        if not match:
+            continue
+        origin = _clean_place(match.group(1))
+        dest = _clean_place(match.group(2))
+        if origin and dest:
+            logger.info("Regex extracted: '%s' -> '%s'", origin, dest)
+            return origin, dest
 
     return "", ""

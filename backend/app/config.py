@@ -79,6 +79,16 @@ class Settings(BaseSettings):
         description="Forecast cache TTL. /health never triggers a refresh.",
     )
 
+    # --- Geocoding fallback -------------------------------------------
+    # Only used for place names absent from the 64-hotspot and 8-landmark
+    # tables. Nominatim's usage policy requires a real contact address and
+    # returns 403 for placeholder domains, so set this before depending on
+    # the fallback in production.
+    nominatim_contact: str = Field(
+        default="contact-unset@floodcast.invalid",
+        description="Contact address sent in the Nominatim User-Agent header",
+    )
+
     # --- Route engine -------------------------------------------------
     corridor_buffer_km: float = Field(
         default=1.5,
