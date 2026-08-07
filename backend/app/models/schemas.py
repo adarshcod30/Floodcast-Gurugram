@@ -130,38 +130,90 @@ class ForecastResponse(BaseModel):
     fetched_at: str
     city: str
     source: str = Field(description="live | cached | fallback | unavailable")
+    provider: str = Field(default="", description="Which upstream produced this forecast")
+    resolution_hours: float = Field(
+        default=1.0,
+        description="Native window width. Surfaced so the UI can be honest about granularity.",
+    )
+    attribution: str = Field(default="", description="Required upstream attribution")
+    notes: List[str] = Field(
+        default_factory=list,
+        description="Provider caveats that affect interpretation, e.g. averaging behaviour",
+    )
 
 
 # ---------------------------------------------------------------------------
-# AQI
+# Timeline — server-computed hourly risk projection
+# ---------------------------------------------------------------------------
+
+class TimelineRisk(BaseModel):
+    """One hotspot's risk at one future hour. Deliberately compact:
+    static attributes already came from /hotspots and are not repeated."""
+    hotspot_id: str
+    risk_score: float
+    risk_level: str
+    time_window: Optional[TimeWindowResponse] = None
+
+
+class TimelineFrameResponse(BaseModel):
+    """Every hotspot's risk at one forecast hour."""
+    hour_offset: int = Field(description="0 is the window covering now")
+    start_time: str
+    intensity_mm_per_hr: float
+    description: str = ""
+    episode_duration_hr: float = Field(
+        description="Length of the contiguous rain episode beginning at this hour"
+    )
+    critical_count: int
+    at_risk_count: int
+    risks: List[TimelineRisk]
+
+
+class TimelineResponse(BaseModel):
+    """Response for GET /api/v1/timeline.
+
+    Exists so the client never re-derives risk locally — a second scoring
+    implementation in TypeScript would drift from the engine, and the two
+    would disagree about the one number this product exists to state.
+    """
+    frames: List[TimelineFrameResponse]
+    total_hours: int
+    forecast_source: str
+    computed_at: str
+
+
+# ---------------------------------------------------------------------------
+# Air quality — India CPCB National AQI
 # ---------------------------------------------------------------------------
 
 class AqiResponse(BaseModel):
-    """Response for GET /api/v1/aqi."""
-    aqi: int = Field(description="Air Quality Index on 1-5 scale (1: Good, 5: Very Poor)")
-    label: str = Field(description="Qualitative label (Good, Fair, Moderate, Poor, Very Poor)")
-    components: Dict[str, float] = Field(description="Individual pollutant concentrations in ug/m3")
+    """Response for GET /api/v1/air-quality.
+
+    Reports the CPCB National AQI (0-500) rather than a provider's own
+    index, because that is the number Gurugram residents and officials
+    actually use. `available` is false rather than a value being invented
+    when upstream data is missing.
+    """
+    available: bool
+    aqi: Optional[int] = Field(default=None, description="CPCB National AQI, 0-500")
+    category: Optional[str] = Field(
+        default=None, description="Good | Satisfactory | Moderate | Poor | Very Poor | Severe"
+    )
+    advisory: Optional[str] = Field(default=None, description="CPCB health advisory for the band")
+    dominant_pollutant: Optional[str] = Field(
+        default=None, description="Pollutant whose sub-index set the overall AQI"
+    )
+    sub_indices: Dict[str, int] = Field(
+        default_factory=dict, description="Per-pollutant sub-index, for auditability"
+    )
+    concentrations: Dict[str, float] = Field(
+        default_factory=dict, description="Concentrations used, in CPCB units"
+    )
+    basis: str = Field(default="", description="How the figure was derived, including caveats")
+    scale: str = Field(default="CPCB National AQI (0-500)")
     fetched_at: str
+    attribution: str = ""
     source: str = Field(description="live | cached | fallback | unavailable")
-
-
-# ---------------------------------------------------------------------------
-# Transit
-# ---------------------------------------------------------------------------
-
-class TransitLineStatus(BaseModel):
-    name: str
-    status: str
-    delay_minutes: int
-    notes: str
-
-
-class TransitStatusResponse(BaseModel):
-    """Response for GET /api/v1/transit."""
-    lines: List[TransitLineStatus]
-    summary: str
-    computed_at: str
-
 
 
 
@@ -220,53 +272,30 @@ class ChatResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Super-App Services (Utilities, Roadworks, Citizen Reports)
+# Citizen reports — real submissions only, never seeded
 # ---------------------------------------------------------------------------
 
-class UtilityResponse(BaseModel):
-    id: str
-    sector_name: str
-    utility_type: str
-    status: str
-    impact_level: str
-    duration_hours: Optional[float] = None
-    notes: str
-    lat: float
-    lon: float
-
-
-class UtilitiesListResponse(BaseModel):
-    utilities: List[UtilityResponse]
-    total: int
-
-
-class RoadworkResponse(BaseModel):
-    id: str
-    location_name: str
-    road_type: str
-    work_type: str
-    severity: str
-    delay_minutes: int
-    notes: str
-    lat: float
-    lon: float
-
-
-class RoadworksListResponse(BaseModel):
-    roadworks: List[RoadworkResponse]
-    total: int
-
-
 class CitizenReportRequest(BaseModel):
-    title: str = Field(..., min_length=3, max_length=100)
-    description: str = Field(..., min_length=10, max_length=500)
-    category: str = Field(..., description="hazard | roadblock | info")
-    location_name: str = Field(..., min_length=3, max_length=100)
-    lat: float
-    lon: float
+    """Body for POST /api/v1/reports. Coordinates are bounded to the
+    Gurugram district so the map cannot be polluted with junk pins."""
+    title: str = Field(..., min_length=3, max_length=120)
+    description: str = Field(..., min_length=10, max_length=600)
+    category: str = Field(
+        ...,
+        description="waterlogging | road_blocked | drain_overflow | safe_passage",
+    )
+    location_name: str = Field(..., min_length=3, max_length=120)
+    lat: float = Field(..., ge=28.20, le=28.70, description="Within Gurugram district bounds")
+    lon: float = Field(..., ge=76.75, le=77.25, description="Within Gurugram district bounds")
 
 
 class CitizenReportResponse(BaseModel):
+    """A citizen report as returned by the API.
+
+    Note there is no `confirmed_by` field: the internal model tracks
+    hashed client identifiers to prevent double-confirmation, and that
+    is an implementation detail, not something to publish.
+    """
     id: str
     title: str
     description: str
@@ -274,12 +303,18 @@ class CitizenReportResponse(BaseModel):
     location_name: str
     lat: float
     lon: float
-    upvotes: int
     created_at: str
-    verified_by_users: List[str]
+    confirmations: int = Field(description="Independent corroborations by other users")
+    age_hours: float
 
 
 class CitizenReportsListResponse(BaseModel):
+    """Response for GET /api/v1/reports. An empty list is a truthful
+    answer for a tool nobody has reported to yet — never seeded."""
     reports: List[CitizenReportResponse]
     total: int
+    active_window_hours: int = Field(
+        description="Reports older than this are dropped; flood conditions change hourly"
+    )
+    source: str = Field(default="citizen_submitted")
 

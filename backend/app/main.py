@@ -1,12 +1,10 @@
-"""
-FloodCast Gurugram — FastAPI Application
-==========================================
-Main application entry point. Handles:
-  - Lifespan (data loading on startup)
-  - CORS configuration (restricted to allowed origins)
-  - Router registration
-  - Structured logging
-  - Rate limiting setup
+"""FloodCast Gurugram — FastAPI application entry point.
+
+Wires together the risk engine, the forecast providers, the LangGraph
+agent pipeline and the citizen-report store, and applies the operational
+guardrails the deployment depends on: restricted CORS, rate limiting on
+the only endpoint that costs money, and structured logging to stdout
+(which Render captures without a separate logging service).
 """
 
 from __future__ import annotations
@@ -15,18 +13,24 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.core.data_loader import load_data
-from app.routers import health, hotspots, attractions, forecast, chat, civic
-
-# ---------------------------------------------------------------------------
-# Structured logging to stdout (Render captures this)
-# ---------------------------------------------------------------------------
+from app.core.reports import init_store
+from app.core.weather import fetch_forecast
+from app.routers import (
+    attractions,
+    chat,
+    forecast,
+    health,
+    hotspots,
+    reports,
+    timeline,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,50 +40,60 @@ logging.basicConfig(
 logger = logging.getLogger("floodcast")
 
 
-# ---------------------------------------------------------------------------
-# Lifespan — load data once at startup
-# ---------------------------------------------------------------------------
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load static data on startup, cleanup on shutdown."""
-    logger.info("Starting FloodCast Gurugram...")
+    """Load static data and warm the forecast cache before serving."""
+    logger.info("Starting FloodCast Gurugram")
+
     try:
         load_data(
             hotspots_path=settings.hotspots_parquet_path,
             attractions_path=settings.attractions_parquet_path,
         )
-        logger.info("Data loaded successfully")
-    except Exception as e:
-        logger.error(f"CRITICAL: Data loading failed: {e}")
-        # Don't crash — /health will report unhealthy
+        logger.info("Hotspot register loaded")
+    except Exception as exc:  # noqa: BLE001 — /health must report this, not crash on it
+        logger.error("CRITICAL: data load failed: %s", exc)
+
+    init_store(settings.reports_store_path)
+
+    # Warm the forecast during startup. Without this, /health reports
+    # "degraded" until the first user request happens to populate the
+    # cache — which would page whoever is on call for a perfectly
+    # healthy deployment that simply hasn't been asked anything yet.
+    try:
+        result = await fetch_forecast()
+        logger.info(
+            "Forecast warmed from %s (%d windows)",
+            result.get("provider", "unknown"),
+            len(result.get("windows", [])),
+        )
+    except Exception as exc:  # noqa: BLE001 — degraded start is still a valid start
+        logger.warning("Forecast warm-up failed, will retry on demand: %s", exc)
 
     yield
 
     logger.info("Shutting down FloodCast Gurugram")
 
 
-# ---------------------------------------------------------------------------
-# App
-# ---------------------------------------------------------------------------
-
 app = FastAPI(
     title="FloodCast Gurugram API",
     description=(
-        "Decision-intelligence API for time-windowed, route-level flood risk "
-        "assessment in Gurugram. Answers: 'Given the current rainfall forecast, "
-        "will my route be risky in the next few hours — and when exactly?'"
+        "Decision-intelligence API for time-windowed, route-level flood risk in "
+        "Gurugram. Answers one question no existing tool answers: given the "
+        "current rainfall forecast, will my route be risky in the next few "
+        "hours — and when exactly?\n\n"
+        "**Data honesty is a product requirement here.** Every hotspot carries a "
+        "`data_confidence` tier from the CSV through to the API response, and the "
+        "risk-model columns are documented engineering estimates rather than "
+        "calibrated predictions. See `backend/data/DATA_PROVENANCE.md`."
     ),
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
-# ---------------------------------------------------------------------------
-# CORS — restricted to allowed origins, not wildcard
-# ---------------------------------------------------------------------------
-
+# CORS restricted to configured origins — never a wildcard.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -88,35 +102,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------------------------
-# Rate limiting
-# ---------------------------------------------------------------------------
-
 app.state.limiter = chat.limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-# ---------------------------------------------------------------------------
-# Routers
-# ---------------------------------------------------------------------------
 
 app.include_router(health.router)
 app.include_router(hotspots.router)
 app.include_router(attractions.router)
 app.include_router(forecast.router)
+app.include_router(timeline.router)
 app.include_router(chat.router)
-app.include_router(civic.router)
+app.include_router(reports.router)
 
-
-# ---------------------------------------------------------------------------
-# Root redirect
-# ---------------------------------------------------------------------------
 
 @app.get("/", include_in_schema=False)
 async def root():
-    """Redirect root to API docs."""
     return {
         "name": "FloodCast Gurugram API",
-        "version": "1.0.0",
+        "version": "2.0.0",
+        "question_answered": (
+            "Given the current rainfall forecast, will my route through Gurugram "
+            "be risky in the next few hours — and when exactly?"
+        ),
         "docs": "/docs",
         "health": "/health",
+        "data_provenance": "backend/data/DATA_PROVENANCE.md",
     }

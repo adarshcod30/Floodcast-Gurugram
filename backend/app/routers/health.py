@@ -1,74 +1,87 @@
-"""
-FloodCast Gurugram — Health Endpoint
-======================================
-GET /health — returns overall status plus individual checks for
-DuckDB/data, weather API, and Bedrock reachability.
+"""Health endpoint, designed for an external uptime monitor.
 
-IMPORTANT: Does NOT trigger fresh API calls on every hit — checks
-cached/last-known state instead. This is designed to be polled by
-UptimeRobot without generating costs or load.
+Two properties matter here and both are easy to get wrong:
+
+1. **It must be cheap.** Every check reads last-known state. Nothing here
+   calls the weather API or Bedrock. A monitor polling every five minutes
+   must not burn a free-tier quota or run up an LLM bill — and a check
+   that itself depends on the thing it is checking tells you nothing.
+
+2. **It must distinguish "degraded" from "down".** This app is built to
+   keep answering with no weather upstream and no LLM: the risk engine is
+   pure computation over static data. So a missing LLM is not an outage,
+   and reporting it as one would train whoever is on call to ignore the
+   alert. Only a failure to load the hotspot register makes the service
+   genuinely unable to do its job.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
-from app.models.schemas import HealthResponse, DependencyStatus
-from app.core.data_loader import is_db_healthy
-from app.core.weather import is_weather_healthy, get_last_fetch_time
 from app.agents.bedrock_client import check_bedrock_connection
+from app.core.data_loader import is_db_healthy
+from app.core.weather import (
+    get_active_provider,
+    get_forecast_source,
+    get_last_error,
+    get_last_fetch_time,
+)
+from app.models.schemas import DependencyStatus, HealthResponse
 
 router = APIRouter()
 
 
 @router.get("/health", response_model=HealthResponse, tags=["Health"])
-async def health_check():
-    """
-    Health check endpoint for uptime monitoring.
+async def health_check(response: Response):
+    """Report dependency status from cached state only.
 
-    Checks (all from cached/last-known state):
-    - DuckDB data load status
-    - Weather API last-known reachability
-    - Bedrock last-known reachability
-
-    Response status:
-    - "healthy" if all dependencies are OK
-    - "degraded" if some dependencies are down but core data is loaded
-    - "unhealthy" if data loading failed
+    Returns HTTP 200 for healthy and degraded, 503 only when the service
+    cannot serve its core function. An uptime monitor should alert on the
+    503, not on a missing optional dependency.
     """
     db_ok = is_db_healthy()
-    weather_ok = is_weather_healthy()
-    bedrock_status = check_bedrock_connection()
+    forecast_source = get_forecast_source()
+    bedrock = check_bedrock_connection()
+
+    # A cached or last-known-good forecast both count as serviceable. The
+    # engine degrades to zero-rainfall scoring only when neither exists.
+    weather_ok = forecast_source in ("cached", "fallback")
 
     dependencies = {
-        "duckdb_data": DependencyStatus(
+        "hotspot_register": DependencyStatus(
             healthy=db_ok,
-            error=None if db_ok else "Data files failed to load",
+            error=None if db_ok else "Hotspot/attraction data failed to load",
             details={"expected_hotspots": 64, "expected_attractions": 8},
         ),
-        "weather_api": DependencyStatus(
+        "weather": DependencyStatus(
             healthy=weather_ok,
-            error=None if weather_ok else "Weather API unreachable on last attempt",
-            details={"last_fetch": get_last_fetch_time()},
-        ),
-        "bedrock": DependencyStatus(
-            healthy=bedrock_status.get("healthy", False),
-            error=bedrock_status.get("error"),
+            error=None if weather_ok else (get_last_error() or "No forecast retrieved yet"),
             details={
-                k: v for k, v in bedrock_status.items()
-                if k not in ("healthy", "error")
+                "provider": get_active_provider(),
+                "freshness": forecast_source,
+                "last_fetch": get_last_fetch_time(),
             },
+        ),
+        "llm": DependencyStatus(
+            healthy=bedrock.get("healthy", False),
+            error=bedrock.get("error"),
+            details={k: v for k, v in bedrock.items() if k not in ("healthy", "error")},
         ),
     }
 
-    # Overall status
     if not db_ok:
+        # The one genuine outage: without the register there is nothing
+        # to score, and no fallback can substitute for it.
         status = "unhealthy"
-    elif not weather_ok or not bedrock_status.get("healthy", False):
+        response.status_code = 503
+    elif not weather_ok:
+        # Serviceable but not useful — risk scores exist, all at zero.
         status = "degraded"
     else:
+        # A missing LLM is a documented operating mode, not a fault.
         status = "healthy"
 
     return HealthResponse(
