@@ -1,0 +1,43 @@
+# ── Secrets ─────────────────────────────────────────────────────────
+# Never commit credentials. .env.example is the committed template.
+.env
+.env.*
+!.env.example
+
+# ── Python ──────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ── Node / frontend ─────────────────────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+
+# ── Runtime state ───────────────────────────────────────────────────
+# Citizen reports are persisted to disk at runtime; the store is user
+# data, not source, and must never be committed.
+backend/var/
+
+# ── Editors & OS ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# ── Logs ────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-error.log*

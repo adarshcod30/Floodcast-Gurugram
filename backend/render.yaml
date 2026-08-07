@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: floodcast-gurugram-backend
+    env: docker
+    plan: free
+    region: singapore # Closest region to Gurugram / India
+    dockerfilePath: Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: OPENWEATHERMAP_API_KEY
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: us-east-1
+      - key: BEDROCK_HAIKU_MODEL_ID
+        value: anthropic.claude-3-5-haiku-20241022-v1:0
+      - key: BEDROCK_SONNET_MODEL_ID
+        value: anthropic.claude-sonnet-4-20250514-v1:0
+      - key: ALLOWED_ORIGINS
+        value: http://localhost:5173,https://floodcast-gurugram.vercel.app
+      - key: CHAT_RATE_LIMIT
+        value: 10/minute
