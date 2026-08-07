@@ -1,170 +1,207 @@
-"""
-FloodCast Gurugram — AWS Bedrock Client
-=========================================
-Wrapper around boto3 Bedrock runtime for Claude model calls.
-Cost-tiered: Haiku for fast/cheap tasks, Sonnet for quality synthesis.
+"""AWS Bedrock client — cost-tiered Claude access.
 
-Model IDs are configurable via environment variables so they can be
-updated without a code change as new versions become available.
+Uses the Anthropic SDK's Bedrock Mantle client (the Messages-API Bedrock
+endpoint) rather than raw `bedrock-runtime` InvokeModel. That choice buys
+three things: current model IDs instead of legacy ARN-versioned strings,
+the same request shape as the first-party API, and no hand-rolled JSON
+envelope to keep in sync.
+
+Cost tiering, per the project brief: Haiku for routing, parsing and
+place-name resolution; Sonnet only for the final verdict synthesis, where
+reasoning quality actually changes the answer.
+
+NO SAMPLING PARAMETERS
+----------------------
+Claude Sonnet 5 rejects `temperature`, `top_p` and `top_k` with a 400.
+The previous implementation sent `temperature=0.3` on every call, which
+would have failed every request against a current model — and because the
+agent layer catches exceptions and falls through to its template path,
+that failure would have been invisible: the app would appear to work
+while silently never reaching the LLM. Steer behaviour through the system
+prompt instead.
+
+EVERY FAILURE IS A None
+-----------------------
+No exception escapes this module. Callers treat `None` as "LLM
+unavailable" and run the deterministic rule-based path. A flood tool has
+to keep answering when its dependencies are under strain, because that is
+exactly when people need it.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import Optional, Dict, Any
-
-import boto3
-from botocore.exceptions import ClientError, NoCredentialsError, EndpointConnectionError
+from typing import Any, Dict, Optional
 
 from app.config import settings
 
 logger = logging.getLogger("floodcast.bedrock")
 
-# Module-level client (lazy init)
-_bedrock_client = None
-_bedrock_healthy: bool = False
+_client = None
+_client_attempted = False
+_healthy: bool = False
 _last_error: Optional[str] = None
+
+#: Bedrock has no Task Budgets support, so cost is bounded by max_tokens.
+_MAX_TOKENS = {"haiku": 1024, "sonnet": 1536}
+
+
+def _credentials_present() -> bool:
+    """Whether AWS credentials are configured at all."""
+    return bool(settings.aws_access_key_id and settings.aws_secret_access_key)
 
 
 def _get_client():
-    """Lazily initialize the Bedrock runtime client."""
-    global _bedrock_client, _bedrock_healthy, _last_error
+    """Lazily construct the Bedrock client. Returns None if unavailable.
 
-    if _bedrock_client is not None:
-        return _bedrock_client
+    Construction is attempted once; a failure is remembered so a missing
+    dependency or bad credentials don't cost a retry on every request.
+    """
+    global _client, _client_attempted, _healthy, _last_error
+
+    if _client is not None or _client_attempted:
+        return _client
+
+    _client_attempted = True
+
+    if not _credentials_present():
+        _last_error = "AWS credentials not configured"
+        logger.info("Bedrock disabled: no AWS credentials. Using rule-based pipeline.")
+        return None
 
     try:
-        _bedrock_client = boto3.client(
-            "bedrock-runtime",
-            region_name=settings.aws_region,
-            aws_access_key_id=settings.aws_access_key_id or None,
-            aws_secret_access_key=settings.aws_secret_access_key or None,
-        )
-        _bedrock_healthy = True
-        logger.info(f"Bedrock client initialized (region: {settings.aws_region})")
-        return _bedrock_client
+        # Imported lazily so the app starts without the optional extra.
+        # The *async* client matters: FastAPI serves on one event loop, so
+        # a synchronous SDK call would block every other in-flight request
+        # for the duration of a model round-trip.
+        from anthropic import AsyncAnthropicBedrockMantle
 
-    except (NoCredentialsError, Exception) as e:
-        _bedrock_healthy = False
-        _last_error = str(e)
-        logger.error(f"Failed to initialize Bedrock client: {e}")
+        kwargs: Dict[str, Any] = {
+            "aws_region": settings.aws_region,
+            "aws_access_key": settings.aws_access_key_id,
+            "aws_secret_key": settings.aws_secret_access_key,
+        }
+        if settings.aws_session_token:
+            kwargs["aws_session_token"] = settings.aws_session_token
+
+        _client = AsyncAnthropicBedrockMantle(**kwargs)
+        _healthy = True
+        _last_error = None
+        logger.info("Bedrock client ready (region=%s)", settings.aws_region)
+        return _client
+
+    except Exception as exc:  # noqa: BLE001 — never let this break startup
+        _healthy = False
+        _last_error = f"Bedrock client init failed: {exc}"
+        logger.warning(_last_error)
         return None
+
+
+def _model_id(tier: str) -> str:
+    return (
+        settings.bedrock_haiku_model_id
+        if tier == "haiku"
+        else settings.bedrock_sonnet_model_id
+    )
 
 
 async def invoke_model(
     prompt: str,
     model_tier: str = "haiku",
-    max_tokens: int = 1024,
-    temperature: float = 0.3,
+    max_tokens: Optional[int] = None,
     system_prompt: Optional[str] = None,
 ) -> Optional[str]:
-    """
-    Invoke a Claude model on Bedrock.
+    """Send one message to Claude on Bedrock and return the text.
 
     Args:
-        prompt: The user message
-        model_tier: "haiku" (fast/cheap) or "sonnet" (quality)
-        max_tokens: Maximum tokens in response
-        temperature: Sampling temperature
-        system_prompt: Optional system message
+        prompt: The user message.
+        model_tier: "haiku" for routing/parsing, "sonnet" for synthesis.
+        max_tokens: Response cap. Defaults per tier.
+        system_prompt: Optional system message.
 
     Returns:
-        The model's response text, or None on failure
+        The response text, or None if the LLM is unavailable for any
+        reason. Never raises.
     """
-    global _bedrock_healthy, _last_error
+    global _healthy, _last_error
 
     client = _get_client()
     if client is None:
         return None
 
-    model_id = (
-        settings.bedrock_haiku_model_id
-        if model_tier == "haiku"
-        else settings.bedrock_sonnet_model_id
-    )
-
-    messages = [{"role": "user", "content": prompt}]
-
-    body = {
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": max_tokens,
-        "messages": messages,
-        "temperature": temperature,
+    model = _model_id(model_tier)
+    request: Dict[str, Any] = {
+        "model": model,
+        "max_tokens": max_tokens or _MAX_TOKENS.get(model_tier, 1024),
+        "messages": [{"role": "user", "content": prompt}],
+        # Deliberately no temperature / top_p / top_k — rejected by
+        # current models. Behaviour is steered by the system prompt.
     }
-
     if system_prompt:
-        body["system"] = system_prompt
+        request["system"] = system_prompt
 
     try:
-        response = client.invoke_model(
-            modelId=model_id,
-            contentType="application/json",
-            accept="application/json",
-            body=json.dumps(body),
-        )
-
-        response_body = json.loads(response["body"].read())
-        text = response_body.get("content", [{}])[0].get("text", "")
-
-        _bedrock_healthy = True
-        _last_error = None
-        return text
-
-    except ClientError as e:
-        _bedrock_healthy = False
-        _last_error = str(e)
-        logger.error(f"Bedrock API error ({model_tier}/{model_id}): {e}")
+        response = await client.messages.create(**request)
+    except Exception as exc:  # noqa: BLE001 — degrade, never propagate
+        _healthy = False
+        _last_error = f"{type(exc).__name__}: {exc}"
+        logger.warning("Bedrock call failed (%s / %s): %s", model_tier, model, exc)
         return None
 
-    except EndpointConnectionError as e:
-        _bedrock_healthy = False
-        _last_error = str(e)
-        logger.error(f"Bedrock connection error: {e}")
+    # A safety classifier can decline with HTTP 200 and stop_reason
+    # "refusal" — an empty content list, not an exception. Check before
+    # indexing, or this raises IndexError on a successful response.
+    if getattr(response, "stop_reason", None) == "refusal":
+        _healthy = True
+        logger.info("Bedrock declined the request (stop_reason=refusal)")
         return None
 
-    except Exception as e:
-        _bedrock_healthy = False
-        _last_error = str(e)
-        logger.error(f"Unexpected Bedrock error: {e}")
-        return None
+    text = "".join(
+        block.text for block in response.content if getattr(block, "type", "") == "text"
+    ).strip()
 
+    _healthy = True
+    _last_error = None
+    return text or None
+
+
+# ---------------------------------------------------------------------------
+# Health introspection — cheap, never makes a model call
+# ---------------------------------------------------------------------------
 
 def is_bedrock_healthy() -> bool:
-    """Check if Bedrock was reachable on the last attempt."""
-    return _bedrock_healthy
+    """Whether the last Bedrock interaction succeeded."""
+    return _healthy
 
 
 def get_last_error() -> Optional[str]:
-    """Get the last Bedrock error message, if any."""
+    """Most recent Bedrock error, if any."""
     return _last_error
 
 
 def check_bedrock_connection() -> Dict[str, Any]:
-    """
-    Check Bedrock connectivity without making a model call.
-    Used by the /health endpoint.
-    """
-    global _bedrock_healthy, _last_error
+    """Report Bedrock configuration state for /health.
 
-    if not settings.aws_access_key_id or not settings.aws_secret_access_key:
-        _bedrock_healthy = False
-        _last_error = "AWS credentials not configured"
+    Deliberately does NOT invoke a model: /health is polled by an uptime
+    monitor, and billing the LLM on every poll would make the check more
+    expensive than the service. "Not configured" is reported as a healthy
+    degraded mode, not an outage — the app is designed to run without it.
+    """
+    if not _credentials_present():
         return {
-            "healthy": False,
-            "error": "AWS credentials not configured",
+            "healthy": True,
+            "configured": False,
+            "mode": "rule_based",
+            "detail": "No AWS credentials — chat runs the deterministic pipeline.",
         }
 
     client = _get_client()
-    if client is None:
-        return {
-            "healthy": False,
-            "error": _last_error or "Client initialization failed",
-        }
-
     return {
-        "healthy": _bedrock_healthy,
+        "healthy": _healthy and client is not None,
+        "configured": True,
+        "mode": "llm",
         "error": _last_error,
         "haiku_model": settings.bedrock_haiku_model_id,
         "sonnet_model": settings.bedrock_sonnet_model_id,
+        "region": settings.aws_region,
     }

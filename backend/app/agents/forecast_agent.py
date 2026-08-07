@@ -79,7 +79,6 @@ async def run_forecast_agent(state: Dict[str, Any]) -> Dict[str, Any]:
                 model_tier="haiku",
                 system_prompt=SYSTEM_PROMPT,
                 max_tokens=512,
-                temperature=0.1,
             )
 
             if llm_response:

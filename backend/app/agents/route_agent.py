@@ -112,7 +112,6 @@ async def _extract_places(query: str) -> tuple[str, str]:
             model_tier="haiku",
             system_prompt=SYSTEM_PROMPT,
             max_tokens=256,
-            temperature=0.0,
         )
 
         if response:
