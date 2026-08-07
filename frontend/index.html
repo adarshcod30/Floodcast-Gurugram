@@ -2,20 +2,36 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0E1417" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    
-    <!-- SEO Optimization -->
-    <title>FloodCast Gurugram — Decision-Intelligence Flood Route Verdicts</title>
-    <meta name="description" content="Get forward-looking, route-level flood risk verdicts in Gurugram before starting your commute. Know when and where it will flood based on real rainfall forecasts." />
-    
-    <!-- OpenStreetMap Leaflet styling -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-     crossorigin=""/>
+
+    <title>FloodCast Gurugram — will my route flood, and when?</title>
+    <meta
+      name="description"
+      content="Time-windowed flood risk for Gurugram routes. Given the current rainfall forecast, see which of 64 known flood points will be impassable, when they flood, and when they clear."
+    />
+
+    <meta property="og:title" content="FloodCast Gurugram" />
+    <meta
+      property="og:description"
+      content="Will my route through Gurugram flood in the next few hours — and when exactly?"
+    />
+    <meta property="og:type" content="website" />
+
+    <!--
+      Leaflet's stylesheet is imported by the map component and bundled,
+      rather than pulled from a CDN. A flood tool should not stop
+      rendering because a third-party host is unreachable — which is
+      most likely during exactly the weather it exists for.
+    -->
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      FloodCast Gurugram needs JavaScript to score the flood register against the live
+      rainfall forecast.
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

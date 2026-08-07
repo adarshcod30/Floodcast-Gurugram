@@ -1,223 +1,771 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
-@import "tailwindcss";
+/* ═══════════════════════════════════════════════════════════════════
+   FloodCast Gurugram — design system
 
-/* ===================================================
-   GURUGRAM PULSE — Premium Design System v3
-   Aesthetic: Vercel/Linear-inspired dark dashboard
-   =================================================== */
+   DIRECTION: instrument, not dashboard.
+
+   This is a reading, like a rain gauge or an IMD bulletin — not a SaaS
+   admin panel. Two rules hold the whole thing together:
+
+   1. COLOUR ONLY EVER MEANS RISK. The chrome is greyscale slate. The
+      only saturated colour in the interface is the IMD rainfall warning
+      band, which is a real standard Indian officials and residents
+      already read. Nothing is tinted for decoration — so when something
+      is orange, it is orange because the rain says so.
+
+   2. EVERY NUMBER IS MONOSPACED. Times, depths, thresholds and
+      coordinates read as instrument output, and columns of figures line
+      up. Prose is Plex Sans; measurements are Plex Mono.
+
+   Surface is a deep slate with a teal cast — wet Gurugram concrete under
+   a storm sky — deliberately not the neutral near-black that every dark
+   dashboard defaults to.
+   ═══════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
 :root {
-  --bg-base: #09090b;
-  --bg-surface: #111113;
-  --bg-elevated: #18181b;
-  --bg-hover: #1f1f23;
-  --bg-card: rgba(24, 24, 27, 0.80);
+  /* ── Surface: monsoon slate ─────────────────────────────────── */
+  --base:      #0E1417;
+  --raised:    #151E22;
+  --raised-2:  #1C272C;
+  --line:      #253238;
+  --line-soft: #1B252A;
 
-  --border-default: rgba(255, 255, 255, 0.06);
-  --border-hover: rgba(255, 255, 255, 0.12);
-  --border-focus: rgba(59, 130, 246, 0.5);
+  /* ── Ink ────────────────────────────────────────────────────── */
+  --ink:       #E9EFF1;
+  --ink-dim:   #93A6AE;
+  --ink-faint: #62757D;
 
-  --text-primary: #fafafa;
-  --text-secondary: #a1a1aa;
-  --text-tertiary: #71717a;
-  --text-quaternary: #52525b;
+  /* ── IMD rainfall warning bands ─────────────────────────────────
+     India Meteorological Department's public colour code. Reused here
+     because it is the vocabulary the audience already has, not because
+     these happen to be nice colours. */
+  --imd-green:  #2E9E63;  /* No warning     — no action */
+  --imd-yellow: #E3B12C;  /* Be aware       — watch conditions */
+  --imd-orange: #E2701B;  /* Be prepared    — plan around it */
+  --imd-red:    #D33A2C;  /* Take action    — avoid the route */
 
-  --accent: #3b82f6;
-  --accent-hover: #60a5fa;
-  --accent-muted: rgba(59, 130, 246, 0.12);
+  /* ── Geometry ───────────────────────────────────────────────── */
+  --r-sm: 4px;
+  --r:    7px;
+  --r-lg: 11px;
 
-  --risk-critical: #f43f5e;
-  --risk-high: #f97316;
-  --risk-moderate: #eab308;
-  --risk-low: #22c55e;
+  --rail-h: 44px;
 
-  --radius: 12px;
-  --radius-sm: 8px;
-  --radius-lg: 16px;
+  color-scheme: dark;
 }
 
-*, *::before, *::after {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body, #root { height: 100%; width: 100%; }
+
+body {
+  background: var(--base);
+  color: var(--ink);
+  font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-html, body, #root {
+/* Numbers are instrument output, everywhere, without exception. */
+.num {
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Small structural labels. Uppercase + wide tracking reads as a gauge
+   marking rather than a heading. */
+.label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+button, input, textarea, select {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+}
+button { cursor: pointer; }
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--raised-2); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Shell
+   ═══════════════════════════════════════════════════════════════════ */
+
+.app {
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  width: 100%;
+  min-height: 0;
+}
+
+/* ── Status rail ─────────────────────────────────────────────────── */
+
+.rail {
+  height: var(--rail-h);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--base);
+}
+
+.rail-mark {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.rail-mark span { color: var(--ink-faint); font-weight: 500; }
+
+.rail-spacer { flex: 1; }
+
+.rail-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+
+/* A live-data pulse. The one animation in the interface, because it
+   encodes something true: the forecast is refreshing on a timer. */
+.pulse {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--imd-green);
+  box-shadow: 0 0 0 0 currentColor;
+  animation: pulse 2.6s ease-out infinite;
+}
+.pulse[data-stale='true'] { background: var(--imd-yellow); }
+.pulse[data-stale='offline'] { background: var(--ink-faint); animation: none; }
+
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(46,158,99,0.45); }
+  70%  { box-shadow: 0 0 0 7px rgba(46,158,99,0); }
+  100% { box-shadow: 0 0 0 0 rgba(46,158,99,0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse { animation: none; }
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   The verdict — the answer to "should I leave now"
+   ═══════════════════════════════════════════════════════════════════ */
+
+.verdict {
+  flex: none;
+  padding: 22px 20px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  align-items: flex-start;
+  gap: 26px;
+}
+
+/* A vertical band in the active IMD colour. The only large area of
+   colour on the page, and it is load-bearing: its hue IS the warning
+   level. */
+.verdict-band {
+  flex: none;
+  width: 4px;
+  align-self: stretch;
+  border-radius: 99px;
+  background: var(--band, var(--imd-green));
+  min-height: 58px;
+}
+
+.verdict-body { flex: 1; min-width: 0; }
+
+.verdict-when {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--band, var(--imd-green));
+  margin-bottom: 5px;
+}
+
+.verdict-line {
+  font-size: clamp(21px, 3.4vw, 31px);
+  font-weight: 700;
+  letter-spacing: -0.032em;
+  line-height: 1.14;
+  text-wrap: balance;
+}
+
+.verdict-detail {
+  margin-top: 8px;
+  font-size: 13.5px;
+  color: var(--ink-dim);
+  max-width: 62ch;
+}
+.verdict-detail strong { color: var(--ink); font-weight: 600; }
+
+.verdict-metrics {
+  flex: none;
+  display: flex;
+  gap: 26px;
+  padding-top: 2px;
+}
+
+.metric-v {
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  display: block;
+  margin-bottom: 5px;
+}
+.metric-u { font-size: 11px; color: var(--ink-faint); font-weight: 400; margin-left: 2px; }
+
+@media (max-width: 720px) {
+  .verdict { flex-direction: column; gap: 16px; padding: 18px 16px 14px; }
+  .verdict-band { width: auto; height: 3px; min-height: 0; align-self: stretch; }
+  .verdict-metrics { gap: 22px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SIGNATURE — the rain-gauge timeline
+
+   One column per forecast hour. Fill height is rainfall depth, fill
+   colour is the IMD band. This is the primary control of the whole
+   interface: selecting an hour re-reads the verdict, the map and the
+   register at that moment. Time is the product's primary axis, so the
+   time axis is the product's primary control.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.gauge {
+  flex: none;
+  padding: 13px 20px 15px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--base);
+}
+
+.gauge-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 11px;
+}
+.gauge-peak { font-size: 11px; color: var(--ink-dim); }
+.gauge-peak b { color: var(--ink); font-weight: 600; }
+
+.gauge-track {
+  display: flex;
+  gap: 3px;
+  align-items: flex-end;
+}
+
+.gauge-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 0;
+  border-radius: var(--r-sm);
+  transition: opacity 0.15s ease;
+  opacity: 0.62;
+}
+.gauge-col:hover { opacity: 0.9; }
+.gauge-col[aria-pressed='true'] { opacity: 1; }
+
+/* The gauge barrel: a fixed-height well the water fills from the
+   bottom, so bar heights are comparable across hours at a glance. The
+   well is visibly lighter than the page — an unfilled barrel must read
+   as "measured, and empty", not as absent. */
+.gauge-well {
+  height: 46px;
+  position: relative;
+  background: var(--raised);
+  border-radius: 3px;
   overflow: hidden;
 }
 
-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  background: var(--bg-base);
-  color: var(--text-primary);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+.gauge-fill {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  background: var(--band);
+  border-radius: 2px 2px 0 0;
+  transition: height 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 2px;
 }
 
-/* ── Sidebar ── */
-.sidebar {
-  background: var(--bg-surface);
-  border-right: 1px solid var(--border-default);
+/* Selection is marked UNDER the column, not around the well — an inset
+   ring around the barrel reads as an empty bar and fights the fill it
+   is supposed to highlight. */
+.gauge-col[aria-pressed='true'] .gauge-well {
+  background: var(--raised-2);
+  box-shadow: 0 2px 0 0 var(--band);
 }
 
-/* ── Cards ── */
-.card {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+.gauge-tick {
+  font-size: 10px;
+  text-align: center;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+.gauge-col[aria-pressed='true'] .gauge-tick { color: var(--ink); font-weight: 600; }
+
+.gauge-mm {
+  font-size: 9.5px;
+  text-align: center;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+.gauge-col[aria-pressed='true'] .gauge-mm { color: var(--ink-dim); }
+
+@media (max-width: 720px) {
+  .gauge { padding: 11px 12px 13px; }
+  .gauge-well { height: 38px; }
+  .gauge-mm { display: none; }
 }
 
-.card:hover {
-  border-color: var(--border-hover);
-}
+/* ═══════════════════════════════════════════════════════════════════
+   Views
+   ═══════════════════════════════════════════════════════════════════ */
 
-.card-interactive:hover {
-  border-color: var(--border-focus);
-  box-shadow: 0 0 0 1px var(--border-focus);
+.tabs {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line-soft);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.tabs::-webkit-scrollbar { display: none; }
 
-/* ── Glass overlay for map floaters ── */
-.glass {
-  background: rgba(9, 9, 11, 0.80);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius);
-}
-
-/* ── Tabs ── */
-.tab-pill {
-  position: relative;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  border-radius: var(--radius-sm);
-  transition: all 0.15s ease;
-  cursor: pointer;
-  border: none;
-  background: none;
+.tab {
+  padding: 10px 13px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-faint);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.12s ease;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 7px;
+}
+.tab:hover { color: var(--ink-dim); }
+.tab[aria-selected='true'] { color: var(--ink); border-bottom-color: var(--ink); }
+
+.tab-count {
+  font-size: 10.5px;
+  padding: 1px 5px;
+  border-radius: 99px;
+  background: var(--raised-2);
+  color: var(--ink-dim);
 }
 
-.tab-pill:hover {
-  color: var(--text-secondary);
-  background: var(--bg-hover);
+.view {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
 }
 
-.tab-pill.active {
-  color: var(--text-primary);
-  background: var(--bg-elevated);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+.scroll {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-/* ── Confidence Badges ── */
-.confidence-mcg {
-  background: rgba(34, 197, 94, 0.10);
-  color: #22c55e;
-  border: 1px solid rgba(34, 197, 94, 0.20);
-}
-.confidence-multi {
-  background: rgba(59, 130, 246, 0.10);
-  color: #3b82f6;
-  border: 1px solid rgba(59, 130, 246, 0.20);
-}
-.confidence-plausible {
-  background: rgba(234, 179, 8, 0.10);
-  color: #eab308;
-  border: 1px solid rgba(234, 179, 8, 0.20);
-}
-.confidence-reconstructed {
-  background: rgba(244, 63, 94, 0.10);
-  color: #f43f5e;
-  border: 1px solid rgba(244, 63, 94, 0.20);
+/* ═══════════════════════════════════════════════════════════════════
+   Hotspot register
+   ═══════════════════════════════════════════════════════════════════ */
+
+.filters {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--base);
+  border-bottom: 1px solid var(--line-soft);
+  flex-wrap: wrap;
 }
 
-.badge {
-  display: inline-flex;
+.field {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--ink);
+  min-width: 0;
+}
+.field::placeholder { color: var(--ink-faint); }
+.field:focus { outline: none; border-color: var(--ink-faint); }
+.field-grow { flex: 1; min-width: 140px; }
+select.field { cursor: pointer; }
+
+.rows { padding: 6px 10px 28px; }
+
+.row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
   align-items: center;
-  gap: 3px;
-  padding: 2px 6px;
-  border-radius: 5px;
-  font-size: 10px;
-  font-weight: 600;
-  font-family: 'JetBrains Mono', monospace;
-  letter-spacing: 0.02em;
+  width: 100%;
+  padding: 11px 10px;
+  border-radius: var(--r);
+  text-align: left;
+  transition: background 0.12s ease;
+  border-bottom: 1px solid var(--line-soft);
+}
+.row:hover { background: var(--raised); }
+
+/* The provenance dot: FILL ENCODES CERTAINTY.
+   Solid = sourced and named. Hollow = real place, unconfirmed as a
+   flood point. Dotted = structural placeholder. This is readable
+   without consulting a legend, which is the point — the confidence
+   tier should be as visible as the risk level. */
+.dot {
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--band);
+}
+.dot[data-conf='confirmed_named_mcg_zone1'] {
+  box-shadow: 0 0 0 2px var(--base), 0 0 0 3.5px var(--band);
+}
+.dot[data-conf='plausible_real_unconfirmed_flood_status'] {
+  background: transparent;
+  border: 1.5px solid var(--band);
+}
+.dot[data-conf='reconstructed_estimate'] {
+  background: transparent;
+  border: 1.5px dotted var(--band);
+  opacity: 0.72;
 }
 
-/* ── Inputs ── */
-input, select, textarea {
-  font-family: inherit;
+.row-main { min-width: 0; }
+.row-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.row-sub {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+.row-right { text-align: right; flex: none; }
+.row-window { font-size: 11px; color: var(--band); white-space: nowrap; }
+.row-clear { font-size: 11px; color: var(--ink-faint); }
 
-input:focus, select:focus, textarea:focus {
-  outline: none;
-  border-color: var(--border-focus) !important;
-  box-shadow: 0 0 0 2px var(--accent-muted);
+.empty {
+  padding: 52px 24px;
+  text-align: center;
+  color: var(--ink-faint);
+  font-size: 13.5px;
+  max-width: 46ch;
+  margin: 0 auto;
 }
+.empty b { display: block; color: var(--ink-dim); font-weight: 600; margin-bottom: 6px; font-size: 14px; }
 
-/* ── Scrollbar ── */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
+/* ═══════════════════════════════════════════════════════════════════
+   Map
+   ═══════════════════════════════════════════════════════════════════ */
 
-/* ── Animation ── */
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-.animate-pulse-dot {
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-/* ── Progress ring ── */
-.progress-ring {
-  transition: stroke-dashoffset 0.5s ease;
-  transform: rotate(-90deg);
-  transform-origin: 50% 50%;
-}
-
-/* ── Leaflet dark overrides ── */
+.map-wrap { position: absolute; inset: 0; }
 .leaflet-container {
-  background: var(--bg-base) !important;
-}
-.leaflet-control-zoom a {
-  background: var(--bg-elevated) !important;
-  color: var(--text-secondary) !important;
-  border-color: var(--border-default) !important;
-}
-.leaflet-control-zoom a:hover {
-  background: var(--bg-hover) !important;
-}
-.leaflet-popup-content-wrapper {
-  background: var(--bg-surface) !important;
-  color: var(--text-primary) !important;
-  border-radius: var(--radius) !important;
-  border: 1px solid var(--border-default) !important;
-  box-shadow: 0 8px 30px rgba(0,0,0,0.5) !important;
-}
-.leaflet-popup-tip {
-  background: var(--bg-surface) !important;
+  height: 100%;
+  width: 100%;
+  background: var(--base);
+  font-family: 'IBM Plex Sans', sans-serif;
 }
 
-/* ── Mono helper ── */
-.mono {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+/* OSM tiles are daylight-bright and fight a dark instrument panel.
+   Damping them lets the risk colour stay the loudest thing on screen —
+   which is the whole rule of this design. */
+.leaflet-tile-pane { filter: invert(1) hue-rotate(185deg) brightness(0.94) contrast(0.86) saturate(0.5); }
+
+.leaflet-control-attribution {
+  background: rgba(14,20,23,0.9) !important;
+  color: var(--ink-faint) !important;
+  font-size: 10px !important;
 }
+.leaflet-control-attribution a { color: var(--ink-dim) !important; }
+.leaflet-bar a {
+  background: var(--raised) !important;
+  color: var(--ink) !important;
+  border-color: var(--line) !important;
+}
+.leaflet-bar a:hover { background: var(--raised-2) !important; }
+
+.leaflet-popup-content-wrapper {
+  background: var(--raised);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: 0 8px 26px rgba(0,0,0,0.5);
+}
+.leaflet-popup-tip { background: var(--raised); border: 1px solid var(--line); }
+.leaflet-popup-content { margin: 11px 13px; font-size: 13px; line-height: 1.5; }
+.leaflet-popup-close-button { color: var(--ink-faint) !important; }
+
+.pop-name { font-weight: 600; font-size: 13.5px; margin-bottom: 3px; }
+.pop-sub { font-size: 11.5px; color: var(--ink-faint); margin-bottom: 8px; }
+.pop-kv { display: flex; justify-content: space-between; gap: 16px; font-size: 12px; padding: 2px 0; }
+.pop-kv span:first-child { color: var(--ink-faint); }
+.pop-note {
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 11px; color: var(--ink-dim); line-height: 1.45;
+}
+
+.legend {
+  position: absolute;
+  left: 12px; bottom: 12px;
+  z-index: 500;
+  background: rgba(14,20,23,0.93);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 10px 12px;
+  max-width: 208px;
+}
+.legend-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--ink-dim); padding: 2.5px 0; }
+.legend-sep { height: 1px; background: var(--line); margin: 7px 0; }
+
+@media (max-width: 720px) { .legend { display: none; } }
+
+.map-toggle {
+  position: absolute;
+  right: 12px; top: 12px;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.map-toggle button {
+  background: rgba(14,20,23,0.93);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 6px 11px;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  text-align: left;
+}
+.map-toggle button[aria-pressed='true'] { color: var(--ink); border-color: var(--ink-faint); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Ask (chat)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.ask { display: flex; flex-direction: column; height: 100%; }
+.ask-log { flex: 1; overflow-y: auto; padding: 18px 16px 8px; }
+
+.msg { max-width: 66ch; margin-bottom: 16px; }
+.msg-you { margin-left: auto; }
+.msg-you .msg-body {
+  background: var(--raised-2);
+  border-radius: var(--r-lg) var(--r-lg) var(--r-sm) var(--r-lg);
+  padding: 9px 13px;
+  font-size: 13.5px;
+}
+.msg-app .msg-body {
+  font-size: 13.5px;
+  line-height: 1.62;
+  border-left: 2px solid var(--band, var(--line));
+  padding-left: 14px;
+}
+.msg-body p { margin-bottom: 9px; }
+.msg-body p:last-child { margin-bottom: 0; }
+.msg-body strong { font-weight: 600; color: var(--ink); }
+
+.msg-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 9px;
+  padding-left: 14px;
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  flex-wrap: wrap;
+}
+
+.chip {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  color: var(--ink-dim);
+}
+.chip[data-tone='llm'] { border-color: var(--imd-green); color: var(--imd-green); }
+
+.ask-form {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--line-soft);
+}
+.ask-input {
+  flex: 1;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 10px 13px;
+  font-size: 13.5px;
+  resize: none;
+  max-height: 120px;
+}
+.ask-input:focus { outline: none; border-color: var(--ink-faint); }
+
+.btn {
+  background: var(--ink);
+  color: var(--base);
+  border-radius: var(--r);
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: opacity 0.12s ease;
+  white-space: nowrap;
+}
+.btn:hover { opacity: 0.87; }
+.btn:disabled { opacity: 0.38; cursor: not-allowed; }
+
+.btn-ghost {
+  background: var(--raised);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.btn-ghost:hover { background: var(--raised-2); opacity: 1; }
+
+.prompts { display: flex; gap: 7px; flex-wrap: wrap; padding: 0 16px 12px; }
+.prompt {
+  font-size: 12px;
+  padding: 6px 11px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  color: var(--ink-dim);
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+.prompt:hover { border-color: var(--ink-faint); color: var(--ink); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Reports
+   ═══════════════════════════════════════════════════════════════════ */
+
+.report-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 13px 15px;
+  margin-bottom: 10px;
+  background: var(--raised);
+}
+.report-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.report-title { font-size: 13.5px; font-weight: 600; }
+.report-age { font-size: 11px; color: var(--ink-faint); white-space: nowrap; }
+.report-where { font-size: 11.5px; color: var(--ink-faint); margin-top: 1px; }
+.report-body { font-size: 13px; color: var(--ink-dim); margin-top: 8px; line-height: 1.55; }
+.report-foot {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--line-soft);
+}
+
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+@media (max-width: 560px) { .form-grid { grid-template-columns: 1fr; } }
+
+.stack { display: flex; flex-direction: column; gap: 9px; }
+.pad { padding: 16px; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Provenance — surfaced, never buried
+   ═══════════════════════════════════════════════════════════════════ */
+
+.note {
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--ink-faint);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+  line-height: 1.6;
+  background: var(--raised);
+}
+.note b { color: var(--ink); font-weight: 600; }
+.note + .note { margin-top: 10px; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Boot & failure states
+   ═══════════════════════════════════════════════════════════════════ */
+
+.boot {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 26px;
+  text-align: center;
+  background: var(--base);
+}
+.boot-mark { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+.boot-msg { font-size: 13px; color: var(--ink-dim); max-width: 44ch; line-height: 1.6; }
+
+/* A filling gauge as the loading indicator — the same visual metaphor
+   as the timeline, so the wait belongs to the product. */
+.boot-gauge {
+  width: 132px; height: 3px;
+  background: var(--line);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.boot-gauge i {
+  display: block; height: 100%; width: 34%;
+  background: var(--ink-dim);
+  border-radius: 99px;
+  animation: fill 1.5s ease-in-out infinite;
+}
+@keyframes fill {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(390%); }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--line-soft) 25%, var(--line) 50%, var(--line-soft) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: var(--r-sm);
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
