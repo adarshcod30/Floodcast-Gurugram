@@ -14,7 +14,7 @@ import json
 import logging
 from typing import Dict, Any
 
-from app.core.weather import fetch_forecast, get_current_intensity, get_forecast_windows
+from app.core.weather import fetch_forecast, get_current_intensity
 from app.agents.bedrock_client import invoke_model
 
 logger = logging.getLogger("floodcast.agents.forecast")

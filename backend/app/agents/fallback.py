@@ -17,12 +17,10 @@ from __future__ import annotations
 
 import re
 import logging
-from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any
 
 from app.core import data_loader
 from app.core.risk_engine import (
-    HotspotData,
     HotspotRisk,
     compute_all_risks,
     risk_summary_text,
@@ -30,10 +28,9 @@ from app.core.risk_engine import (
 from app.core.route_engine import (
     analyze_route,
     corridor_summary_text,
-    CorridorResult,
 )
 from app.core.geocoding import resolve_place
-from app.core.weather import get_current_intensity, get_forecast_windows
+from app.core.weather import get_current_intensity
 from app.config import settings
 
 logger = logging.getLogger("floodcast.fallback")

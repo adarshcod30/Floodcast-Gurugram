@@ -20,9 +20,9 @@ from __future__ import annotations
 import math
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
-from app.core.risk_engine import HotspotData, HotspotRisk
+from app.core.risk_engine import HotspotRisk
 
 logger = logging.getLogger("floodcast.route_engine")
 
@@ -249,10 +249,10 @@ def corridor_summary_text(result: CorridorResult) -> str:
     lines = [
         f"Route from {result.origin_name} to {result.destination_name} "
         f"({result.total_distance_km:.1f} km straight-line):",
-        f"",
+        "",
         f"⚠ {len(risky)} of {len(result.hotspots_on_corridor)} nearby hotspot(s) "
         f"are at elevated risk.",
-        f"",
+        "",
         f"Worst point: {worst.name} — {worst.risk_level.upper()} risk "
         f"(score {worst.risk_score:.2f})",
     ]
@@ -265,8 +265,8 @@ def corridor_summary_text(result: CorridorResult) -> str:
 
     # List other risky hotspots
     if len(risky) > 1:
-        lines.append(f"")
-        lines.append(f"Other elevated-risk hotspots on this corridor:")
+        lines.append("")
+        lines.append("Other elevated-risk hotspots on this corridor:")
         for h in risky[1:5]:  # Show up to 4 more
             htw = h.time_window
             tw_str = ""
@@ -279,9 +279,9 @@ def corridor_summary_text(result: CorridorResult) -> str:
                 f"  • {h.name}: {h.risk_level.upper()} (score {h.risk_score:.2f}){tw_str}"
             )
 
-    lines.append(f"")
+    lines.append("")
     lines.append(
-        f"Note: This is straight-line corridor analysis, not turn-by-turn routing."
+        "Note: This is straight-line corridor analysis, not turn-by-turn routing."
     )
 
     return "\n".join(lines)

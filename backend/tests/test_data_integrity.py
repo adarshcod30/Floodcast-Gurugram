@@ -39,11 +39,16 @@ class TestHotspotsParquet:
         """All required columns must be present."""
         data_dir = _find_data_dir()
         conn = duckdb.connect(":memory:")
-        result = conn.execute(
+        row = conn.execute(
             f"SELECT * FROM read_parquet('{data_dir}/hotspots_extended.parquet') LIMIT 1"
         ).fetchone()
         columns = [desc[0] for desc in conn.description]
         conn.close()
+
+        # The row itself must exist — otherwise conn.description could
+        # report the schema of an empty file and every column assertion
+        # below would pass against no data at all.
+        assert row is not None, "hotspots_extended.parquet has no rows"
 
         required = [
             "hotspot_id", "name", "locality_area", "zone", "severity_tier",

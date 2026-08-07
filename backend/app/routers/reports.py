@@ -5,7 +5,17 @@ store starts empty and stays empty until someone files something; an
 empty list is a truthful answer, not a bug.
 """
 
-from __future__ import annotations
+# NOTE: deliberately no `from __future__ import annotations` here.
+#
+# With it, annotations become strings that FastAPI resolves against the
+# function's __globals__. slowapi's @limiter.limit wraps the handler via
+# functools.wraps, which cannot copy __globals__ — so FastAPI resolves
+# against *slowapi's* namespace, fails to find CitizenReportRequest, and
+# silently demotes the request body to a query parameter. Every POST
+# then 422s with "body: Field required".
+#
+# It fails confusingly rather than obviously, because `Request` happens
+# to resolve (slowapi imports it) while the body model does not.
 
 import hashlib
 

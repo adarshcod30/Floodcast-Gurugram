@@ -19,7 +19,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List
 
 from app.agents.bedrock_client import invoke_model
-from app.core.risk_engine import risk_summary_text, HotspotRisk
 
 logger = logging.getLogger("floodcast.agents.verdict")
 
@@ -131,7 +130,7 @@ def _build_context(state: Dict[str, Any]) -> str:
 
         hotspots = state.get("corridor_hotspots", [])
         if len(hotspots) > 1:
-            lines.append(f"\nOther hotspots on corridor:")
+            lines.append("\nOther hotspots on corridor:")
             for h in hotspots[1:5]:
                 lines.append(f"  • {h.get('name', '?')}: {h.get('risk_level', '?')} "
                              f"(confidence: {h.get('data_confidence', '?')})")

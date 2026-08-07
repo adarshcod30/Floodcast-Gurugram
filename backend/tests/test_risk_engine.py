@@ -8,17 +8,14 @@ and expected outputs. No external dependencies, no network calls.
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
 from app.core.risk_engine import (
     HotspotData,
-    ForecastWindow,
     compute_hotspot_risk,
     compute_all_risks,
-    compute_risks_multi_window,
     classify_risk_level,
     risk_summary_text,
-    TIER_WEIGHTS,
 )
 
 
@@ -98,7 +95,10 @@ def minor_hotspot():
 @pytest.fixture
 def reference_time():
     """Fixed reference time for deterministic tests."""
-    return datetime(2026, 7, 15, 14, 0, 0)  # 2:00 PM
+    # Timezone-aware, because the engine's only internal representation
+    # is aware UTC. A naive fixture here would test a state the engine
+    # no longer accepts.
+    return datetime(2026, 7, 15, 14, 0, 0, tzinfo=timezone.utc)  # 2:00 PM UTC
 
 
 # ---------------------------------------------------------------------------

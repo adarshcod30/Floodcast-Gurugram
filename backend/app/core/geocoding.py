@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import time
 from difflib import SequenceMatcher
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Dict, Any
 
 from cachetools import TTLCache
 
