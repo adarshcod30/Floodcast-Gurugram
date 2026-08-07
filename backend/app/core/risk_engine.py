@@ -30,8 +30,20 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
+
+
+def utcnow() -> datetime:
+    """Timezone-aware UTC 'now'.
+
+    Every datetime inside this engine is aware UTC, without exception.
+    A naive datetime serialised with .isoformat() carries no offset, and
+    the browser reads such a string as *local* time — which on a UTC
+    server would shift every flood window by 5.5 hours for an IST user.
+    Conversion to India Standard Time happens only at the display edge.
+    """
+    return datetime.now(timezone.utc)
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +143,28 @@ TIER_WEIGHTS = {
 
 
 # ---------------------------------------------------------------------------
+# Rain-episode definition
+# ---------------------------------------------------------------------------
+
+#: Below this intensity, drainage keeps pace and water does not accumulate,
+#: so an hour of trace drizzle does not extend a flood episode.
+#:
+#: This floor exists because hourly forecast data made a naive "any rain > 0"
+#: rule produce absurd results: a monsoon week with continuous light drizzle
+#: chained into a single 28-hour "episode", which the scoring function then
+#: read as 28 hours of accumulation and pushed every clear-by time most of a
+#: day into the future. The tool's entire value is the accuracy of that
+#: clear-by time, so the definition of "still raining" has to mean
+#: "still raining enough to matter".
+RAIN_EPISODE_FLOOR_MM_HR = 1.0
+
+#: Forecast skill degrades sharply past this horizon. Treating a 30-hour
+#: modelled episode as one continuous event states far more confidence than
+#: the underlying forecast supports.
+MAX_EPISODE_HOURS = 12.0
+
+
+# ---------------------------------------------------------------------------
 # Risk level thresholds
 # ---------------------------------------------------------------------------
 
@@ -170,7 +204,11 @@ def compute_hotspot_risk(
         HotspotRisk with score, level, and time window
     """
     if reference_time is None:
-        reference_time = datetime.now()
+        reference_time = utcnow()
+    elif reference_time.tzinfo is None:
+        # Defensive: a naive reference time from a caller is interpreted as
+        # UTC rather than allowed to poison downstream arithmetic.
+        reference_time = reference_time.replace(tzinfo=timezone.utc)
 
     threshold = hotspot.rainfall_threshold_mm_per_hr
 
@@ -288,7 +326,6 @@ def compute_risks_multi_window(
     """
     if not forecast_windows:
         # No forecast data — return all low risk
-        now = datetime.now()
         return [
             HotspotRisk(
                 hotspot_id=h.hotspot_id,
@@ -323,6 +360,131 @@ def compute_risks_multi_window(
     result = list(worst_risks.values())
     result.sort(key=lambda r: r.risk_score, reverse=True)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Timeline projection — "what will this look like in N hours?"
+# ---------------------------------------------------------------------------
+
+@dataclass
+class TimelineFrame:
+    """Every hotspot's risk at one future hour, plus the rain driving it."""
+    hour_offset: int
+    start_time: datetime
+    intensity_mm_per_hr: float
+    description: str
+    #: Length of the contiguous rain episode beginning at this frame.
+    episode_duration_hr: float
+    risks: List[HotspotRisk]
+
+    @property
+    def critical_count(self) -> int:
+        return sum(1 for r in self.risks if r.risk_level == "critical")
+
+    @property
+    def at_risk_count(self) -> int:
+        return sum(1 for r in self.risks if r.risk_score > 0)
+
+    def to_dict(self) -> dict:
+        return {
+            "hour_offset": self.hour_offset,
+            "start_time": self.start_time.isoformat(),
+            "intensity_mm_per_hr": round(self.intensity_mm_per_hr, 2),
+            "description": self.description,
+            "episode_duration_hr": round(self.episode_duration_hr, 1),
+            "critical_count": self.critical_count,
+            "at_risk_count": self.at_risk_count,
+            # Compact per-hotspot payload: the client needs only the score,
+            # level and window to redraw — the static attributes it already
+            # holds from /hotspots are not repeated for every frame.
+            "risks": [
+                {
+                    "hotspot_id": r.hotspot_id,
+                    "risk_score": round(r.risk_score, 3),
+                    "risk_level": r.risk_level,
+                    "time_window": r.time_window.to_dict() if r.time_window else None,
+                }
+                for r in self.risks
+            ],
+        }
+
+
+def episode_duration_from(windows: List[ForecastWindow], index: int) -> float:
+    """Hours of sustained rain starting at `index`.
+
+    A hotspot floods from sustained rain, not from the same total spread
+    across a dry afternoon — so duration is a contiguous run, stopping at
+    the first window that drops below RAIN_EPISODE_FLOOR_MM_HR, and
+    capped at MAX_EPISODE_HOURS because forecast skill does not extend
+    past that.
+    """
+    if index >= len(windows) or windows[index].intensity_mm_per_hr < RAIN_EPISODE_FLOOR_MM_HR:
+        return 0.0
+
+    total = 0.0
+    i = index
+    while (
+        i < len(windows)
+        and windows[i].intensity_mm_per_hr >= RAIN_EPISODE_FLOOR_MM_HR
+        and total < MAX_EPISODE_HOURS
+    ):
+        total += (windows[i].end_time - windows[i].start_time).total_seconds() / 3600
+        i += 1
+    return min(total, MAX_EPISODE_HOURS)
+
+
+def project_timeline(
+    hotspots: List[HotspotData],
+    forecast_windows: List[ForecastWindow],
+    hours: int = 8,
+) -> List[TimelineFrame]:
+    """Score every hotspot at each of the next `hours` forecast windows.
+
+    This exists so the "what does this look like at 6 PM?" scrubber is
+    driven by the same scoring function as the live view. The client must
+    never re-derive risk locally: a second implementation in TypeScript
+    would drift from this one, and the two would disagree about the single
+    number the product exists to state.
+
+    Windows already in the past are skipped, so `hour_offset` 0 is always
+    the window covering now.
+    """
+    if not forecast_windows or not hotspots:
+        return []
+
+    now = utcnow()
+    upcoming = [w for w in forecast_windows if w.end_time > now]
+    if not upcoming:
+        return []
+
+    frames: List[TimelineFrame] = []
+    for offset, window in enumerate(upcoming[:hours]):
+        duration = episode_duration_from(upcoming, offset)
+        # For the frame covering now, risk accrues from now rather than
+        # from the top of the hour that has partly elapsed.
+        reference = max(window.start_time, now) if offset == 0 else window.start_time
+
+        risks = [
+            compute_hotspot_risk(
+                h,
+                window.intensity_mm_per_hr,
+                duration,
+                reference_time=reference,
+            )
+            for h in hotspots
+        ]
+        risks.sort(key=lambda r: r.risk_score, reverse=True)
+
+        frames.append(TimelineFrame(
+            hour_offset=offset,
+            start_time=window.start_time,
+            intensity_mm_per_hr=window.intensity_mm_per_hr,
+            description=window.description,
+            episode_duration_hr=duration,
+            risks=risks,
+        ))
+
+    return frames
 
 
 # ---------------------------------------------------------------------------
