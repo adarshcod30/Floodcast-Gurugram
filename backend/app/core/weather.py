@@ -1,313 +1,328 @@
-"""
-FloodCast Gurugram — Weather Forecast Module
-==============================================
-Fetches rainfall forecast from OpenWeatherMap and caches it with an
-hourly TTL. Never hits OWM on every request — the cache is the primary
-data source for the risk engine.
+"""Forecast orchestration and caching.
 
-On failure: returns last cached data if available, or a synthetic
-"no data" response that lets the rest of the pipeline fall back to
-rule-based defaults.
+This layer owns three things the providers deliberately do not:
+
+1. **Provider selection** — Open-Meteo by default; OpenWeatherMap when a
+   key is configured and selected. If the preferred provider fails, the
+   other is tried before giving up.
+2. **Caching** — one TTL cache (default 1 hour) shared by every endpoint.
+   No request path ever triggers a provider call directly; `/health` in
+   particular reads last-known state only, so an uptime monitor polling
+   every five minutes cannot burn quota or mask a real outage.
+3. **Graceful degradation** — if every provider fails, the last good
+   forecast is served with `source: "fallback"`. If there has never been
+   a good forecast, `source: "unavailable"` is returned with empty
+   windows, and the risk engine scores everything as low rather than
+   inventing rain. This tool has to behave predictably during exactly the
+   weather that makes upstream APIs flaky.
 """
 
 from __future__ import annotations
 
 import logging
-import time
-from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
-import httpx
 from cachetools import TTLCache
 
 from app.config import settings
-from app.core.risk_engine import ForecastWindow
+from app.core.aqi import compute_aqi
+from app.core.providers import WeatherProviderError
+from app.core.providers import open_meteo, open_weather
+from app.core.risk_engine import (
+    MAX_EPISODE_HOURS,
+    RAIN_EPISODE_FLOOR_MM_HR,
+    ForecastWindow,
+)
 
 logger = logging.getLogger("floodcast.weather")
 
-# Cache: max 1 entry (the Gurugram forecast), TTL from config
-_forecast_cache: TTLCache = TTLCache(maxsize=1, ttl=settings.weather_cache_ttl_seconds)
-_CACHE_KEY = "gurugram_forecast"
+# --- Caches -----------------------------------------------------------------
 
-# Last successful response (fallback if OWM goes down)
+_forecast_cache: TTLCache = TTLCache(maxsize=1, ttl=settings.weather_cache_ttl_seconds)
+_aqi_cache: TTLCache = TTLCache(maxsize=1, ttl=settings.weather_cache_ttl_seconds)
+_FORECAST_KEY = "forecast"
+_AQI_KEY = "aqi"
+
+# --- Last-known-good state (survives cache expiry, powers degradation) ------
+
 _last_good_forecast: Optional[Dict[str, Any]] = None
+_last_good_aqi: Optional[Dict[str, Any]] = None
 _last_fetch_time: Optional[datetime] = None
 _weather_healthy: bool = False
+_last_error: Optional[str] = None
 
 
-def _parse_owm_forecast(raw: Dict[str, Any]) -> List[ForecastWindow]:
-    """
-    Parse OpenWeatherMap 5-day/3-hour forecast response into
-    ForecastWindow objects with rainfall intensity.
-    """
-    windows = []
-    items = raw.get("list", [])
+# ---------------------------------------------------------------------------
+# Forecast
+# ---------------------------------------------------------------------------
 
-    for item in items:
-        dt = datetime.fromtimestamp(item["dt"], tz=timezone.utc)
-        # OWM gives 3-hour windows
-        end_dt = dt + timedelta(hours=3)
+def _serialise(result) -> Dict[str, Any]:
+    """Turn a ProviderResult into the cached/API dict shape."""
+    return {
+        "windows": [
+            {
+                "start_time": w.start_time.isoformat(),
+                "end_time": w.end_time.isoformat(),
+                "intensity_mm_per_hr": round(w.intensity_mm_per_hr, 2),
+                "description": w.description,
+            }
+            for w in result.windows
+        ],
+        # Typed objects retained for in-process use by the risk engine.
+        "forecast_windows": result.windows,
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "city": result.city,
+        "provider": result.provider,
+        "resolution_hours": result.resolution_hours,
+        "attribution": result.attribution,
+        "notes": result.notes,
+        "source": "live",
+    }
 
-        # Rain volume in last 3 hours (mm) — convert to mm/hr
-        rain_3h = item.get("rain", {}).get("3h", 0.0)
-        intensity_mm_hr = rain_3h / 3.0  # Convert 3h total to hourly rate
 
-        # Also check for snow (rare in Gurugram but be safe)
-        snow_3h = item.get("snow", {}).get("3h", 0.0)
-        total_precip_mm_hr = (rain_3h + snow_3h) / 3.0
+def _provider_order() -> List[str]:
+    """Preferred provider first, then the remaining viable one."""
+    preferred = (settings.weather_provider or "open-meteo").strip().lower()
+    has_owm_key = bool(settings.openweathermap_api_key)
 
-        description = ""
-        if item.get("weather"):
-            description = item["weather"][0].get("description", "")
-
-        windows.append(ForecastWindow(
-            start_time=dt,
-            end_time=end_dt,
-            intensity_mm_per_hr=total_precip_mm_hr,
-            description=description,
-        ))
-
-    return windows
+    if preferred == "openweathermap" and has_owm_key:
+        return ["openweathermap", "open-meteo"]
+    # Open-Meteo needs no key, so it is always a valid fallback.
+    return ["open-meteo", "openweathermap"] if has_owm_key else ["open-meteo"]
 
 
 async def fetch_forecast() -> Dict[str, Any]:
-    """
-    Fetch the rainfall forecast from OpenWeatherMap.
-    Uses cache with hourly TTL. Returns cached data on failure.
+    """Return the rainfall forecast, from cache when warm.
 
-    Returns a dict with:
-      - "windows": List of ForecastWindow dicts
-      - "fetched_at": ISO timestamp of last fetch
-      - "source": "live" | "cached" | "fallback" | "unavailable"
-      - "city": city name from OWM
+    Only a cache miss triggers a network call. Never raises: on total
+    failure it degrades to the last good forecast, or to an explicit
+    "unavailable" result.
     """
-    global _last_good_forecast, _last_fetch_time, _weather_healthy
+    global _last_good_forecast, _last_fetch_time, _weather_healthy, _last_error
 
-    # Check cache first
-    cached = _forecast_cache.get(_CACHE_KEY)
+    cached = _forecast_cache.get(_FORECAST_KEY)
     if cached is not None:
         return {**cached, "source": "cached"}
 
-    # Cache miss — fetch fresh
-    api_key = settings.openweathermap_api_key
-    if not api_key:
-        logger.warning("No OpenWeatherMap API key configured — using fallback")
-        return _get_fallback("no_api_key")
+    errors: List[str] = []
+    for provider in _provider_order():
+        try:
+            if provider == "open-meteo":
+                result = await open_meteo.fetch(settings.gurugram_lat, settings.gurugram_lon)
+            else:
+                result = await open_weather.fetch(
+                    settings.gurugram_lat,
+                    settings.gurugram_lon,
+                    settings.openweathermap_api_key,
+                )
+        except WeatherProviderError as exc:
+            logger.warning("Provider %s failed: %s", provider, exc)
+            errors.append(f"{provider}: {exc}")
+            continue
 
-    url = "https://api.openweathermap.org/data/2.5/forecast"
-    params = {
-        "lat": settings.gurugram_lat,
-        "lon": settings.gurugram_lon,
-        "appid": api_key,
-        "units": "metric",
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(url, params=params)
-            response.raise_for_status()
-
-        raw = response.json()
-        windows = _parse_owm_forecast(raw)
-
-        result = {
-            "windows": [
-                {
-                    "start_time": w.start_time.isoformat(),
-                    "end_time": w.end_time.isoformat(),
-                    "intensity_mm_per_hr": round(w.intensity_mm_per_hr, 2),
-                    "description": w.description,
-                }
-                for w in windows
-            ],
-            "forecast_windows": windows,  # Keep typed objects for internal use
-            "fetched_at": datetime.now(timezone.utc).isoformat(),
-            "city": raw.get("city", {}).get("name", "Gurugram"),
-            "source": "live",
-        }
-
-        # Update cache and fallback
-        _forecast_cache[_CACHE_KEY] = result
-        _last_good_forecast = result
+        payload = _serialise(result)
+        _forecast_cache[_FORECAST_KEY] = payload
+        _last_good_forecast = payload
         _last_fetch_time = datetime.now(timezone.utc)
         _weather_healthy = True
+        _last_error = None
+        logger.info(
+            "Forecast refreshed from %s (%d windows, %sh resolution)",
+            result.provider, len(result.windows), result.resolution_hours,
+        )
+        return payload
 
-        logger.info(f"Fetched fresh forecast: {len(windows)} windows")
-        return result
-
-    except Exception as e:
-        logger.error(f"Weather API fetch failed: {e}")
-        _weather_healthy = False
-        return _get_fallback(str(e))
+    _weather_healthy = False
+    _last_error = "; ".join(errors) or "no provider configured"
+    return _degraded_forecast(_last_error)
 
 
-def _get_fallback(reason: str) -> Dict[str, Any]:
-    """Return the last good forecast or a no-data sentinel."""
+def _degraded_forecast(reason: str) -> Dict[str, Any]:
+    """Serve last-known-good, or an explicit no-data result."""
     if _last_good_forecast is not None:
-        logger.info(f"Using last good forecast (reason: {reason})")
-        return {**_last_good_forecast, "source": "fallback"}
+        logger.info("Serving last-known-good forecast (%s)", reason)
+        return {**_last_good_forecast, "source": "fallback", "error": reason}
 
-    logger.warning(f"No forecast data available at all (reason: {reason})")
+    logger.warning("No forecast available at all (%s)", reason)
     return {
         "windows": [],
         "forecast_windows": [],
         "fetched_at": datetime.now(timezone.utc).isoformat(),
         "city": "Gurugram",
+        "provider": "none",
+        "resolution_hours": 0.0,
+        "attribution": "",
+        "notes": [],
         "source": "unavailable",
         "error": reason,
     }
 
 
-def get_current_intensity() -> tuple[float, float]:
-    """
-    Get the current/nearest forecast intensity and expected duration.
-    Returns (intensity_mm_hr, duration_hr).
-
-    Used by the risk engine for quick scoring without the full
-    forecast window breakdown.
-    """
-    cached = _forecast_cache.get(_CACHE_KEY)
-    if cached is None and _last_good_forecast is not None:
-        cached = _last_good_forecast
-
-    if cached is None or not cached.get("forecast_windows"):
-        return (0.0, 0.0)
-
-    windows: List[ForecastWindow] = cached["forecast_windows"]
-    now = datetime.now(timezone.utc)
-
-    # Find the current or next window with rain
-    relevant_windows = []
-    for w in windows:
-        # Consider windows that are current or in the next 6 hours
-        if w.end_time > now and (w.start_time - now).total_seconds() < 6 * 3600:
-            if w.intensity_mm_per_hr > 0:
-                relevant_windows.append(w)
-
-    if not relevant_windows:
-        return (0.0, 0.0)
-
-    # Peak intensity across relevant windows
-    peak_intensity = max(w.intensity_mm_per_hr for w in relevant_windows)
-
-    # Total duration of rain
-    total_duration_hr = sum(
-        (w.end_time - w.start_time).total_seconds() / 3600
-        for w in relevant_windows
-    )
-
-    return (peak_intensity, total_duration_hr)
+def _cached_forecast() -> Optional[Dict[str, Any]]:
+    """Read cached-or-last-good forecast without ever hitting the network."""
+    return _forecast_cache.get(_FORECAST_KEY) or _last_good_forecast
 
 
 def get_forecast_windows() -> List[ForecastWindow]:
-    """Get parsed ForecastWindow objects from the cache."""
-    cached = _forecast_cache.get(_CACHE_KEY)
-    if cached is None and _last_good_forecast is not None:
-        cached = _last_good_forecast
-
+    """Typed forecast windows from cache. Empty list if nothing is known."""
+    cached = _cached_forecast()
     if cached is None:
         return []
-
     return cached.get("forecast_windows", [])
 
 
+def get_current_intensity(lookahead_hours: int = 6) -> Tuple[float, float]:
+    """Peak rainfall intensity in the lookahead horizon, and how long it lasts.
+
+    Returns (intensity_mm_hr, duration_hr).
+
+    The duration is the length of the *contiguous rain episode* containing
+    the peak — not the total of every scattered rainy hour in the horizon.
+    That distinction matters: three separate one-hour showers spread over
+    six hours drain between each other and do not flood a chowk, whereas
+    three consecutive hours of the same rain do. Summing them would have
+    told the risk engine the wrong story.
+    """
+    cached = _cached_forecast()
+    if cached is None:
+        return (0.0, 0.0)
+
+    windows: List[ForecastWindow] = cached.get("forecast_windows") or []
+    if not windows:
+        return (0.0, 0.0)
+
+    now = datetime.now(timezone.utc)
+    horizon = now.timestamp() + lookahead_hours * 3600
+
+    relevant = [
+        w for w in windows
+        if w.end_time > now and w.start_time.timestamp() <= horizon
+    ]
+    if not relevant:
+        return (0.0, 0.0)
+
+    peak_index = max(range(len(relevant)), key=lambda i: relevant[i].intensity_mm_per_hr)
+    peak = relevant[peak_index].intensity_mm_per_hr
+    if peak <= 0:
+        return (0.0, 0.0)
+
+    # Walk outward from the peak while rain stays above the floor below
+    # which drainage keeps pace. Using "> 0" here would chain a week of
+    # trace drizzle into one enormous episode — see RAIN_EPISODE_FLOOR_MM_HR.
+    floor = RAIN_EPISODE_FLOOR_MM_HR
+    start = peak_index
+    while start > 0 and relevant[start - 1].intensity_mm_per_hr >= floor:
+        start -= 1
+    end = peak_index
+    while end + 1 < len(relevant) and relevant[end + 1].intensity_mm_per_hr >= floor:
+        end += 1
+
+    duration = sum(
+        (relevant[i].end_time - relevant[i].start_time).total_seconds() / 3600
+        for i in range(start, end + 1)
+    )
+    return (peak, min(duration, MAX_EPISODE_HOURS))
+
+
+# ---------------------------------------------------------------------------
+# Air quality
+# ---------------------------------------------------------------------------
+
+AQI_BASIS = (
+    "CPCB National AQI computed from a 24-hour mean of Open-Meteo modelled "
+    "hourly concentrations. Modelled data, not a CPCB ground-station reading."
+)
+
+
+async def fetch_aqi() -> Dict[str, Any]:
+    """Return the CPCB National AQI, from cache when warm.
+
+    Returns a dict with `available: False` rather than a fabricated value
+    when the upstream call fails and nothing has ever been cached.
+    """
+    global _last_good_aqi
+
+    cached = _aqi_cache.get(_AQI_KEY)
+    if cached is not None:
+        return {**cached, "source": "cached"}
+
+    try:
+        concentrations = await open_meteo.fetch_air_quality(
+            settings.gurugram_lat, settings.gurugram_lon
+        )
+    except WeatherProviderError as exc:
+        logger.warning("Air-quality fetch failed: %s", exc)
+        return _degraded_aqi(str(exc))
+
+    result = compute_aqi(concentrations, basis=AQI_BASIS)
+    if result is None:
+        # CPCB's minimum-data rule was not met. Say so; do not guess.
+        return _degraded_aqi("insufficient pollutant coverage for CPCB AQI")
+
+    payload = {
+        **result.to_dict(),
+        "available": True,
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "attribution": open_meteo.ATTRIBUTION,
+        "source": "live",
+    }
+    _aqi_cache[_AQI_KEY] = payload
+    _last_good_aqi = payload
+    return payload
+
+
+def _degraded_aqi(reason: str) -> Dict[str, Any]:
+    """Serve last-known-good AQI, or an explicit unavailable result."""
+    if _last_good_aqi is not None:
+        return {**_last_good_aqi, "source": "fallback", "error": reason}
+
+    return {
+        "available": False,
+        "aqi": None,
+        "category": None,
+        "advisory": None,
+        "dominant_pollutant": None,
+        "sub_indices": {},
+        "concentrations": {},
+        "basis": AQI_BASIS,
+        "scale": "CPCB National AQI (0-500)",
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "attribution": open_meteo.ATTRIBUTION,
+        "source": "unavailable",
+        "error": reason,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Health introspection — read-only, never triggers a fetch
+# ---------------------------------------------------------------------------
+
 def is_weather_healthy() -> bool:
-    """Check if the weather API was reachable on the last attempt."""
+    """Whether the last provider attempt succeeded."""
     return _weather_healthy
 
 
 def get_last_fetch_time() -> Optional[str]:
-    """Get the timestamp of the last successful fetch."""
-    if _last_fetch_time:
-        return _last_fetch_time.isoformat()
-    return None
+    """ISO timestamp of the last successful fetch, if any."""
+    return _last_fetch_time.isoformat() if _last_fetch_time else None
 
 
-# --- AQI Cache & Fetching ---
-_aqi_cache: TTLCache = TTLCache(maxsize=1, ttl=settings.weather_cache_ttl_seconds)
-_AQI_CACHE_KEY = "gurugram_aqi"
-_last_good_aqi: Optional[Dict[str, Any]] = None
+def get_last_error() -> Optional[str]:
+    """Most recent provider error, if the last attempt failed."""
+    return _last_error
 
 
-async def fetch_aqi() -> Dict[str, Any]:
-    """
-    Fetch the air quality index (AQI) from OpenWeatherMap.
-    Uses cache with hourly TTL. Returns cached/synthetic fallback on failure.
-    """
-    global _last_good_aqi
-
-    # Check cache first
-    cached = _aqi_cache.get(_AQI_CACHE_KEY)
-    if cached is not None:
-        return {**cached, "source": "cached"}
-
-    api_key = settings.openweathermap_api_key
-    if not api_key:
-        logger.warning("No OpenWeatherMap API key configured for AQI — using fallback")
-        return _get_aqi_fallback("no_api_key")
-
-    url = "https://api.openweathermap.org/data/2.5/air_pollution"
-    params = {
-        "lat": settings.gurugram_lat,
-        "lon": settings.gurugram_lon,
-        "appid": api_key,
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(url, params=params)
-            response.raise_for_status()
-
-        raw = response.json()
-        item = raw.get("list", [{}])[0]
-        aqi_val = item.get("main", {}).get("aqi", 1)  # 1-5 scale
-        components = item.get("components", {})
-
-        aqi_labels = {
-            1: "Good",
-            2: "Fair",
-            3: "Moderate",
-            4: "Poor",
-            5: "Very Poor",
-        }
-
-        result = {
-            "aqi": aqi_val,
-            "label": aqi_labels.get(aqi_val, "Unknown"),
-            "components": {k: round(v, 2) for k, v in components.items()},
-            "fetched_at": datetime.now(timezone.utc).isoformat(),
-            "source": "live",
-        }
-
-        _aqi_cache[_AQI_CACHE_KEY] = result
-        _last_good_aqi = result
-        return result
-
-    except Exception as e:
-        logger.error(f"AQI API fetch failed: {e}")
-        return _get_aqi_fallback(str(e))
+def get_active_provider() -> str:
+    """Provider that produced the currently-held forecast."""
+    cached = _cached_forecast()
+    return (cached or {}).get("provider", "none")
 
 
-def _get_aqi_fallback(reason: str) -> Dict[str, Any]:
-    """Return the last good AQI or a synthetic moderate AQI estimate for Gurugram."""
-    if _last_good_aqi is not None:
-        return {**_last_good_aqi, "source": "fallback"}
-
-    logger.warning(f"No AQI data available (reason: {reason}) — using synthetic Gurugram fallback")
-    return {
-        "aqi": 3,
-        "label": "Moderate",
-        "components": {
-            "pm2_5": 35.5,
-            "pm10": 70.2,
-            "no2": 15.4,
-            "o3": 45.1,
-            "co": 250.0,
-            "so2": 4.8,
-            "nh3": 5.2,
-        },
-        "fetched_at": datetime.now(timezone.utc).isoformat(),
-        "source": "unavailable",
-        "error": reason,
-    }
-
+def get_forecast_source() -> str:
+    """Freshness of the currently-held forecast, without fetching."""
+    if _forecast_cache.get(_FORECAST_KEY) is not None:
+        return "cached"
+    if _last_good_forecast is not None:
+        return "fallback"
+    return "unavailable"
