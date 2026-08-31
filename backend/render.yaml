@@ -46,9 +46,12 @@ services:
         value: anthropic.claude-sonnet-5
 
       # ── Web ────────────────────────────────────────────────────────
-      # Exact origins, never a wildcard. Replace with your Vercel URL.
+      # Exact origins, never a wildcard. A Vercel project under a team
+      # scope (not a personal account) gets a team-suffixed domain
+      # rather than the bare <name>.vercel.app — replace with whatever
+      # `vercel project ls` or the dashboard actually shows you.
       - key: ALLOWED_ORIGINS
-        value: https://floodcast-gurugram.vercel.app
+        value: https://floodcast-gurugram-adarshcod30s-projects.vercel.app,https://floodcast-gurugram-git-main-adarshcod30s-projects.vercel.app
       - key: CHAT_RATE_LIMIT
         value: 10/minute
       - key: REPORT_RATE_LIMIT
