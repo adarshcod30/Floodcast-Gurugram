@@ -101,6 +101,12 @@ export default function ReportsPanel({ reports, onChanged }: Props) {
           was flooded this morning has usually drained by evening.
         </div>
 
+        <div className="note">
+          Filing here does not notify the city. To get GMDA to act, call its 24×7 Flood
+          Control Office: <span className="num">1800-180-1817</span> or{' '}
+          <span className="num">0124-4753555</span>.
+        </div>
+
         {!open && (
           <button className="btn btn-ghost" onClick={() => setOpen(true)}>
             File a report

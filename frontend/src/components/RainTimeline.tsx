@@ -76,7 +76,7 @@ export default function RainTimeline({ frames, selected, onSelect }: Props) {
               aria-pressed={frame.hour_offset === selected}
               aria-label={
                 `${label}: ${frame.intensity_mm_per_hr.toFixed(1)} millimetres per hour, ` +
-                `${frame.at_risk_count} of 64 points at risk`
+                `${frame.at_risk_count} of 73 points at risk`
               }
               onClick={() => onSelect(frame.hour_offset)}
             >

@@ -12,6 +12,7 @@ export type RiskLevel = 'critical' | 'high' | 'moderate' | 'low';
 export type Confidence =
   | 'confirmed_named_mcg_zone1'
   | 'confirmed_named_multi_source'
+  | 'confirmed_named_2026_monsoon'
   | 'plausible_real_unconfirmed_flood_status'
   | 'reconstructed_estimate';
 

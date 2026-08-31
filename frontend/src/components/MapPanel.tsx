@@ -203,7 +203,7 @@ export default function MapPanel({
 
       <div className="map-toggle">
         <button aria-pressed={showWatchlist} onClick={onToggleWatchlist}>
-          {showWatchlist ? 'All 64 points' : 'Sourced only (30)'}
+          {showWatchlist ? 'All 73 points' : 'Sourced only (39)'}
         </button>
         <button aria-pressed={showLandmarks} onClick={onToggleLandmarks}>
           Landmarks

@@ -1,5 +1,5 @@
 /**
- * The hotspot register — all 64 points, searchable and filterable.
+ * The hotspot register — all 73 points, searchable and filterable.
  *
  * Every row leads with a provenance dot whose FILL encodes certainty,
  * matching the map. The register is where an evaluator checks the
@@ -77,6 +77,7 @@ export default function RegisterPanel({ hotspots, riskAt }: Props) {
           <option value="sourced">Sourced only ({sourcedCount})</option>
           <option value="confirmed_named_mcg_zone1">MCG Zone 1</option>
           <option value="confirmed_named_multi_source">Multi-source</option>
+          <option value="confirmed_named_2026_monsoon">2026 monsoon</option>
           <option value="plausible_real_unconfirmed_flood_status">Watchlist</option>
           <option value="reconstructed_estimate">Placeholder</option>
         </select>

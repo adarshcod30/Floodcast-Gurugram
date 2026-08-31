@@ -21,9 +21,13 @@ export default function AboutPanel({ hotspots, forecast, aqiBasis }: Props) {
   const total = hotspots.length;
   const sourced = hotspots.filter((h) => isSourced(h.data_confidence)).length;
 
-  const byTier = (['confirmed_named_mcg_zone1', 'confirmed_named_multi_source',
-    'plausible_real_unconfirmed_flood_status', 'reconstructed_estimate'] as const)
-    .map((tier) => ({ tier, count: hotspots.filter((h) => h.data_confidence === tier).length }));
+  const byTier = ([
+    'confirmed_named_mcg_zone1',
+    'confirmed_named_multi_source',
+    'confirmed_named_2026_monsoon',
+    'plausible_real_unconfirmed_flood_status',
+    'reconstructed_estimate',
+  ] as const).map((tier) => ({ tier, count: hotspots.filter((h) => h.data_confidence === tier).length }));
 
   return (
     <div className="scroll">
@@ -33,6 +37,17 @@ export default function AboutPanel({ hotspots, forecast, aqiBasis }: Props) {
           through Gurugram be risky in the next few hours — and when exactly. It is not a
           static hotspot map, and it does not duplicate MCG's citizen-reporting portal.
           The forward-looking, time-windowed verdict is the entire product.
+        </div>
+
+        <div className="note" style={{ borderLeftColor: 'var(--imd-red)' }}>
+          <b>This monsoon.</b> Gurugram had a severe 2026 season: a 97mm-in-a-day event that
+          left old Gurugram worst hit, an 8–9 August event — 225mm over two days — after which
+          MCG's Commissioner said the city had identified 155 waterlogging-prone points, and a
+          75mm day on 24 August that triggered a citywide work-from-home order, stranding
+          schoolchildren in buses for 3–6 hours. None of MCG's 155, GMDA's own 6-point
+          "vulnerable spots" list, and a separately-reported 28-point list for this season
+          agree with each other — they measure different things. This register does not
+          claim to match any of them; see the confidence tiers below for what it does claim.
         </div>
 
         <div className="note" style={{ borderLeftColor: 'var(--imd-yellow)' }}>
@@ -83,6 +98,17 @@ export default function AboutPanel({ hotspots, forecast, aqiBasis }: Props) {
           {aqiBasis && (
             <span style={{ display: 'block', marginTop: 6 }}>Air quality: {aqiBasis}</span>
           )}
+        </div>
+
+        <div className="note">
+          <b>Other Gurugram flood tools, and who to actually call.</b> FloodWatch Gurgaon is
+          an independent, volunteer-built project covering 700+ areas with a static
+          "Monsoon Readiness Score" and a hypothetical rain simulator — a different mechanism
+          from the live-forecast, time-windowed route verdict here. Neither tool can make the
+          city act. For that, GMDA runs a 24×7 Flood Control Office:{' '}
+          <span className="num">1800-180-1817</span> or <span className="num">0124-4753555</span>.
+          Filing a report on the Reports tab notifies nobody at the city — call the number if
+          you need action, not just a record.
         </div>
 
         <div className="note">

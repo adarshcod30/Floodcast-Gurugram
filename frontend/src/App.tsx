@@ -138,7 +138,7 @@ export default function App() {
         <p className="boot-msg">
           {phase === 'waking'
             ? 'Waking the server. It sleeps when idle on the free tier, so the first request takes up to a minute.'
-            : 'Reading the forecast and scoring 64 flood points…'}
+            : 'Reading the forecast and scoring 73 flood points…'}
         </p>
       </div>
     );

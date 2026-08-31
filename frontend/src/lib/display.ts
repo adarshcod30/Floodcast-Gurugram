@@ -102,6 +102,11 @@ export const CONFIDENCE: Record<Confidence, { short: string; blurb: string }> = 
     short: 'Multi-source',
     blurb: 'A recurring waterlogging point in two or more independent news reports, 2022–2025.',
   },
+  confirmed_named_2026_monsoon: {
+    short: '2026 monsoon',
+    blurb:
+      'Named by a dated, on-record institutional source from the current season — a named GMDA official or a specific enumerated list — not inferred from severity language across older coverage.',
+  },
   plausible_real_unconfirmed_flood_status: {
     short: 'Watchlist',
     blurb:
@@ -116,7 +121,11 @@ export const CONFIDENCE: Record<Confidence, { short: string; blurb: string }> = 
 
 /** True for tiers backed by a named source. */
 export function isSourced(c: Confidence): boolean {
-  return c === 'confirmed_named_mcg_zone1' || c === 'confirmed_named_multi_source';
+  return (
+    c === 'confirmed_named_mcg_zone1' ||
+    c === 'confirmed_named_multi_source' ||
+    c === 'confirmed_named_2026_monsoon'
+  );
 }
 
 /* ── Text ─────────────────────────────────────────────────────────── */
