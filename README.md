@@ -12,16 +12,23 @@ A risk score with no time attached is not an answer to *"should I leave now"*, s
 
 This project treats data honesty as a product requirement, not a disclaimer. The distinction below is visible in the API responses, on the map, in the register, and on a dedicated **"What's real"** tab in the app — not buried in a CSV column.
 
-### The hotspot register — 30 of 64 points are sourced
+### This monsoon
+
+Gurugram had a severe 2026 season: a 97mm-in-a-day event that left old Gurugram worst hit, an 8–9 August event — **225mm over two days** — after which MCG's Commissioner said the city had identified **155 waterlogging-prone points**, and a **75mm day on 24 August** that triggered a citywide work-from-home advisory, stranding schoolchildren in buses for 3–6 hours ([The Tribune](https://www.tribuneindia.com/news/gurugram/gurugram-drowns-again-millennium-citys-poshest-mile-goes-under-forces-wfh-order-for-aug-25/), [New Kerala/ANI](https://www.newkerala.com/news/a/gurugram-identifies-155-waterlogging-prone-points-municipal-corporation-gurugram-984.htm)).
+
+None of the official counts agree with each other. MCG's 155, GMDA's own 6-point "vulnerable spots" list, a separate ~40-site chronic-sewer list, and a 28-point list the Tribune itself enumerated all measure different things, from different agencies, at different dates. This register does not claim to match any of them — see [`DATA_PROVENANCE.md`](backend/data/DATA_PROVENANCE.md) §9 for the full reconciliation, or the lack of one.
+
+### The hotspot register — 39 of 73 points are sourced
 
 | Count | Tier | What it means |
 |---:|---|---|
 | **4** | `confirmed_named_mcg_zone1` | Named directly in MCG's own Zone 1 hotspot list |
 | **26** | `confirmed_named_multi_source` | A recurring waterlogging point in two or more independent news reports, 2022–2025 |
+| **9** | `confirmed_named_2026_monsoon` | Named by a dated, on-record institutional source from the *current* season — GMDA's CEO by name, or a specific enumerated Tribune list — added after this monsoon's events |
 | **24** | `plausible_real_unconfirmed_flood_status` | A real Gurugram locality on low ground or near a bad corridor. **No source confirms it floods.** A watchlist, not a finding |
 | **10** | `reconstructed_estimate` | Not found named in any source. Present only to preserve MCG's official 36-point count. **A placeholder, not a fact** |
 
-**Do not quote "64 hotspots" as though it carries the weight of "36 hotspots."** Expanding the register diluted average confidence, because the supply of real, sourced points ran out. That trade-off is documented rather than hidden.
+**Do not quote "73 hotspots" as though it carries the weight of "36 hotspots," or as a claim to match MCG's 155.** Expanding the register diluted average confidence relative to the original 36 (72% sourced), even though this round's nine additions are all sourced. That trade-off is documented rather than hidden.
 
 ### The risk model is calibrated, not measured
 
@@ -31,7 +38,7 @@ The scoring *logic* is sound and tested. The *inputs* are not measurements. This
 
 ### Every coordinate is approximate
 
-No geocoding API placed these points; they are best-effort positions from Gurugram's sector layout and road network. `coordinates_verified` is `No` for all 64 rows, on purpose, as a standing reminder. `scripts/verify_coordinates.py` audits them against OpenStreetMap and writes a review report — it never edits the data.
+No geocoding API placed these points; they are best-effort positions from Gurugram's sector layout and road network. `coordinates_verified` is `No` for all 73 rows, on purpose, as a standing reminder. `scripts/verify_coordinates.py` audits them against OpenStreetMap and writes a review report — it never edits the data.
 
 ### Route risk is straight-line corridor matching, not routing
 
@@ -43,7 +50,7 @@ Full methodology: [`backend/data/DATA_PROVENANCE.md`](backend/data/DATA_PROVENAN
 
 ## What it does
 
-- **Time-windowed risk for 64 flood points.** Compares live hourly rainfall against each point's threshold and computes when it floods and when it clears.
+- **Time-windowed risk for 73 flood points.** Compares live hourly rainfall against each point's threshold and computes when it floods and when it clears.
 - **Route verdicts.** Resolves two place names, finds the hotspots along the corridor between them, and returns the worst point and worst window.
 - **An hourly risk timeline.** Scrub forward through the forecast and watch the map, the verdict and the register re-read at that hour.
 - **CPCB National AQI.** The 0–500 scale Indian residents and officials actually use, computed from a 24-hour pollutant mean — not a vendor's 1–5 index.
@@ -90,7 +97,7 @@ Open http://localhost:5173. Interactive API docs are at http://localhost:8000/do
                               │                                    │
                               ▼                                    ▼
   Parquet ──DuckDB──▶  ┌──────────────┐   ┌──────────────┐   ┌───────────┐
-  64 hotspots          │   Forecast   │──▶│ Risk engine  │──▶│ LangGraph │
+  73 hotspots          │   Forecast   │──▶│ Risk engine  │──▶│ LangGraph │
   8 landmarks          │  cache 1h    │   │ (pure funcs) │   │  agents   │
                        └──────────────┘   └──────────────┘   └───────────┘
                                                   │                 │
@@ -129,6 +136,16 @@ The signature element is the **rain-gauge timeline**: one barrel per forecast ho
 
 ---
 
+## Prior art — this doesn't exist in a vacuum
+
+Two other things already address parts of this problem, and this project neither duplicates nor ignores them:
+
+**[FloodWatch Gurgaon](https://floodwatchgurgaon.in)** is an independent, volunteer-built project covering 700+ areas with a static "Monsoon Readiness Score" (0–100, from elevation, drainage and historical incidents) and a rain simulator for testing hypothetical scenarios. It also uses Open-Meteo. The mechanism is different from this project's: MRS is a per-area seasonal-readiness score you check once; this tool reads the *live* forecast and answers a *route*, with an explicit time window, on demand. Neither approach makes the other redundant — they answer different questions. FloodWatch's complaint-email and ward-contact tooling is a genuine feature this project doesn't have; see below for the honest substitute.
+
+**GMDA runs a 24×7 Flood Control Office** — a real-time monitoring room (Integrated Control & Command Centre), not a predictive tool, with a public helpline: **1800-180-1817** / **0124-4753555**. This project cannot make the city deploy a pump or clear a drain. If a verdict here says a route is critical, the number to actually call is that one — surfaced directly in the app's Reports and About tabs, not left for the user to go find.
+
+---
+
 ## API
 
 Base URL `http://localhost:8000` · full OpenAPI docs at `/docs`
@@ -136,7 +153,7 @@ Base URL `http://localhost:8000` · full OpenAPI docs at `/docs`
 | Method | Endpoint | Returns |
 |---|---|---|
 | `GET` | `/health` | Dependency status from cached state. Never triggers an upstream call |
-| `GET` | `/api/v1/hotspots` | 64 hotspots with current risk, time window and `data_confidence` |
+| `GET` | `/api/v1/hotspots` | 73 hotspots with current risk, time window and `data_confidence` |
 | `GET` | `/api/v1/attractions` | 8 landmarks. **Never** carries a risk field |
 | `GET` | `/api/v1/forecast` | Cached rainfall, with provider, resolution and attribution |
 | `GET` | `/api/v1/timeline` | Per-hour risk projection for every hotspot |
@@ -210,12 +227,13 @@ The tests assert product invariants, not just status codes — that `data_confid
 
 ### Regenerating the datasets
 
-The CSVs are static input, loaded once at startup. Both generators use fixed seeds, so output is byte-identical across runs.
+The CSVs are static input, loaded once at startup. All three generators use fixed seeds, so output is byte-identical across runs. **Run from `backend/`, not `backend/data/`** — each script writes to a path relative to `backend/`.
 
 ```bash
-cd backend/data
-python3 generate_hotspots.py     # the 36-row official-structure base
-python3 generate_expansion.py    # reads the base, writes the 64-row register
+cd backend
+python3 data/generate_hotspots.py            # the 36-row official-structure base
+python3 data/generate_expansion.py           # reads the base, writes the 64-row register
+python3 data/generate_2026_monsoon_update.py # reads that, writes the 73-row register
 ```
 
 **Edit the generators, never the CSVs** — a hand-edited CSV drifts from its generator and the next regeneration silently discards the correction.
@@ -235,7 +253,7 @@ Writes a report of distances between dataset coordinates and OpenStreetMap. It n
 Stated plainly, because a tool that overstates its confidence is worse than no tool:
 
 1. **The risk model is uncalibrated.** Thresholds and drain times are tier-based estimates. Treat every timing as directional.
-2. **34 of 64 points are unconfirmed or placeholder.** Filter to sourced-only in the register or on the map to see just the 30 that are backed by a named source.
+2. **34 of 73 points are unconfirmed or placeholder.** Filter to sourced-only in the register or on the map to see just the 39 that are backed by a named source.
 3. **Coordinates are approximate.** A pin means "this junction, roughly", never a survey position.
 4. **Routes are straight-line corridors.** Not turn-by-turn.
 5. **Forecast, not observation.** No rain gauge or ground sensor feeds this system. It reasons about what a weather model predicts, which is not the same as what is happening on the road right now — which is exactly why citizen reports exist alongside it.
@@ -258,6 +276,6 @@ The most valuable thing GMDA could contribute is historical rainfall-versus-floo
 
 ## Credits & licence
 
-Rainfall and air quality from [Open-Meteo](https://open-meteo.com) (CC-BY 4.0). Map tiles © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors. Warning colours follow the [India Meteorological Department](https://mausam.imd.gov.in) scheme. Hotspot classification derived from MCG public reporting and independent news coverage 2022–2025 — see [`DATA_PROVENANCE.md`](backend/data/DATA_PROVENANCE.md) for every source.
+Rainfall and air quality from [Open-Meteo](https://open-meteo.com) (CC-BY 4.0). Map tiles © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors. Warning colours follow the [India Meteorological Department](https://mausam.imd.gov.in) scheme. Hotspot classification derived from MCG and GMDA public reporting and independent news coverage, 2022–2026 — see [`DATA_PROVENANCE.md`](backend/data/DATA_PROVENANCE.md) for every source.
 
 MIT.
