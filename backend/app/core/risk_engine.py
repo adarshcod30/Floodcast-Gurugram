@@ -8,7 +8,7 @@ is a pure function with deterministic output given fixed inputs — this is
 what makes the test suite reliable.
 
 HOW IT WORKS:
-For each of the 64 hotspots, compare the live rainfall forecast (intensity
+For each of the 73 hotspots, compare the live rainfall forecast (intensity
 in mm/hr and expected duration) against that hotspot's threshold. When
 forecast intensity meets or exceeds the threshold, compute:
   1. When the hotspot is estimated to start flooding

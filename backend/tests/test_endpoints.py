@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import app
 
 RISK_FIELDS = {
@@ -26,13 +27,22 @@ RISK_FIELDS = {
 CONFIDENCE_TIERS = {
     "confirmed_named_mcg_zone1",
     "confirmed_named_multi_source",
+    "confirmed_named_2026_monsoon",
     "plausible_real_unconfirmed_flood_status",
     "reconstructed_estimate",
 }
 
 
 @pytest.fixture(scope="module")
-def client():
+def client(tmp_path_factory):
+    # Redirect the citizen-report store to an isolated temp file before the
+    # app's lifespan runs init_store(). Without this, TestClient(app) writes
+    # through the SAME var/citizen_reports.json a real dev server uses (both
+    # run from backend/), so every test run left a fake "Test Underpass"
+    # report sitting in the live store — exactly the dishonesty the report
+    # store exists to prevent, and it was found by live-checking the app
+    # after a test run, not by the suite itself.
+    settings.reports_store_path = str(tmp_path_factory.mktemp("reports") / "citizen_reports.json")
     with TestClient(app) as c:
         yield c
 
@@ -70,8 +80,8 @@ class TestHealth:
 class TestHotspots:
     def test_returns_full_register(self, client):
         body = client.get("/api/v1/hotspots").json()
-        assert body["total"] == 64
-        assert len(body["hotspots"]) == 64
+        assert body["total"] == 73
+        assert len(body["hotspots"]) == 73
 
     def test_every_hotspot_carries_data_confidence(self, client):
         """data_confidence must survive the whole pipeline.
@@ -160,7 +170,7 @@ class TestTimeline:
             assert frame["at_risk_count"] >= frame["critical_count"]
             # Every hotspot appears in every frame, so the client can
             # render a complete picture without re-deriving anything.
-            assert len(frame["risks"]) == 64
+            assert len(frame["risks"]) == 73
 
     def test_hour_zero_is_now(self, client):
         frames = client.get("/api/v1/timeline").json()["frames"]

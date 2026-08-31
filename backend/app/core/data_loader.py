@@ -5,7 +5,7 @@ Loads the static parquet files once at startup using DuckDB in-process.
 No separate database service needed — DuckDB runs embedded.
 
 This module reads:
-  - hotspots_extended.parquet (64 rows) — the full risk register
+  - hotspots_extended.parquet (73 rows) — the full risk register
   - attractions.parquet (8 rows) — landmark POIs, NO risk fields
 
 The data is loaded once and cached in memory. The generator scripts
@@ -72,8 +72,8 @@ def load_data(
         hs_columns = [desc[0] for desc in conn.description]
 
         hotspot_dicts = [dict(zip(hs_columns, row)) for row in hs_result]
-        assert len(hotspot_dicts) == 64, (
-            f"Expected 64 hotspot rows, got {len(hotspot_dicts)}. "
+        assert len(hotspot_dicts) == 73, (
+            f"Expected 73 hotspot rows, got {len(hotspot_dicts)}. "
             f"Data may be corrupted — see DATA_PROVENANCE.md"
         )
 
@@ -137,14 +137,14 @@ def load_data(
 
 
 def get_hotspots() -> List[HotspotData]:
-    """Get all 64 hotspot data objects."""
+    """Get all 73 hotspot data objects."""
     if _hotspots is None:
         raise RuntimeError("Data not loaded — call load_data() first")
     return _hotspots
 
 
 def get_hotspots_raw() -> List[Dict[str, Any]]:
-    """Get all 64 hotspot rows as raw dicts (for API responses)."""
+    """Get all 73 hotspot rows as raw dicts (for API responses)."""
     if _hotspots_raw is None:
         raise RuntimeError("Data not loaded — call load_data() first")
     return _hotspots_raw

@@ -54,7 +54,7 @@ async def health_check(response: Response):
         "hotspot_register": DependencyStatus(
             healthy=db_ok,
             error=None if db_ok else "Hotspot/attraction data failed to load",
-            details={"expected_hotspots": 64, "expected_attractions": 8},
+            details={"expected_hotspots": 73, "expected_attractions": 8},
         ),
         "weather": DependencyStatus(
             healthy=weather_ok,

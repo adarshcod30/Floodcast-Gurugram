@@ -73,11 +73,12 @@ that swapping synthetic values for real, spot-calibrated ones later is a
 data update, not a code rewrite.
 
 ## 5. Regenerating this dataset
-Run `python3 generate_hotspots.py` from the `floodcast/` directory. The
-random seed is fixed (42), so the synthetic columns are reproducible —
-re-running produces byte-identical output. Editing `HOTSPOTS` in that file
-is the only supported way to correct or add a row; don't hand-edit the CSV,
-it'll drift from the generator.
+Run `python3 data/generate_hotspots.py` from the **`backend/`** directory
+(the script writes to relative path `data/hotspots.csv`, so it must be run
+from one level up). The random seed is fixed (42), so the synthetic
+columns are reproducible — re-running produces byte-identical output.
+Editing `HOTSPOTS` in that file is the only supported way to correct or
+add a row; don't hand-edit the CSV, it'll drift from the generator.
 
 ## 6. The expansion (hotspots_extended.csv / .parquet) — 64 rows
 A second script, `generate_expansion.py`, reads the original 36-row file
@@ -124,8 +125,138 @@ no severity tier, no synthetic risk fields, and should never be joined
 into the hotspot risk logic as if they were hotspots.
 
 ## 8. Regenerating the expansion
-Run `python3 generate_expansion.py` from the `floodcast/` directory
+Run `python3 data/generate_expansion.py` from the **`backend/`** directory
 *after* `generate_hotspots.py` has already produced `hotspots.csv` — it
 reads that file as input. Seed is fixed (43, deliberately different from
 the base dataset's 42) for reproducibility. Edit `TIER_B`, `TIER_C`, or
 `ATTRACTIONS` in that file to correct or extend; don't hand-edit the CSVs.
+
+## 9. The 2026 monsoon season update (hotspots_extended.csv / .parquet) — 73 rows
+
+A third script, `generate_2026_monsoon_update.py`, reads the 64-row
+extended file (never modifies it in place) and adds 9 more rows, all
+under a new confidence tier, `confirmed_named_2026_monsoon`.
+
+### Why a new tier, not the existing ones
+These nine are named by a direct, dated, on-record institutional source
+from the *current* 2026 season — GMDA CEO P.C. Meena by name, or a
+specific enumerated Tribune list — rather than inferred from severity
+language across news coverage spanning several years, which is what
+`confirmed_named_multi_source` means. That is *stronger*, more current
+sourcing, and folding it into either existing confirmed tier would either
+overstate or understate it. It gets its own label instead.
+
+### What actually happened this monsoon (why this update exists)
+Gurugram had a severe 2026 monsoon:
+- A 97mm-in-a-day event that left "old Gurugram areas worst hit."
+- An 8–9 August event — **225mm of rain over two consecutive days** — after
+  which MCG Commissioner Pradeep Dahiya stated the city had identified
+  **155 waterlogging-prone points** citywide. No structured list of all
+  155 was published; only named examples (chiefly Sheetla Mata Road)
+  appear in reporting.
+- A 24 August event — **75mm in a single day** — that triggered a
+  citywide work-from-home advisory for 25 August, stranded schoolchildren
+  in buses for 3–6 hours, and produced traffic jams up to 4km long.
+
+### The official counts do not reconcile — and this document will not pretend they do
+As of the 2026 season, at least **four different agency framings** of
+"how many flood points does Gurugram have" are in public circulation
+simultaneously, and they are not the same list measured differently —
+they come from different authorities, different methodologies, and
+different dates:
+
+| Count | Source | What it actually measures |
+|---|---|---|
+| 155 | MCG Commissioner Pradeep Dahiya, 9 Aug 2026 | Every point that showed *any* temporary waterlogging after a specific 225mm/2-day event — a high-water-mark count, not a standing list |
+| 6 (was 7) | GMDA CEO P.C. Meena, 2026 | GMDA's own "vulnerable spots" — the most severe, chronic, currently-*unresolved* locations only; Narsinghpur was the 7th until its drain fix (see below) |
+| ~40 | MCG, various 2026 reporting | Sites with *chronic sewer overflow combined with* poor drainage — a public-health framing, not a pure waterlogging count |
+| 79 → 16 | GMDA, 2020 → 2024 (see section 6) | A *separate* master-roads tracking system, pre-dating the 2026 season, with no confirmed 2026 update |
+| 28 | The Tribune, 9 Aug 2026 | Points the paper itself identified as "key waterlogging challenges" that specific monsoon — a press enumeration, not an official list |
+
+Treat every one of these numbers as true for what it specifically
+measures, and false the moment it is generalized into "Gurugram has N
+flood points." This register — even at 73 rows — is not a claim to
+completeness against any of them; it only contains points we can
+individually name and source, at the confidence level disclosed per row.
+
+### The nine new rows
+
+**Hypercritical (5)** — the five other members of GMDA's current
+"vulnerable spots" list. The sixth member, Khandsa Chowk, already exists
+in this register as "Khandsa Road" (base 36, `confirmed_named_multi_source`)
+and was not duplicated.
+
+- Sheetla Mata Road — also #1 on the Tribune's separate "28 points this
+  monsoon" list; an STP is specifically planned for it
+- Jwala Mill Road
+- Sector 28 (near Chakkarpur)
+- Laxman Vihar
+- Krishna Chowk
+
+**Moderate (4)** — named on the Tribune's "28 points this monsoon" list,
+not on GMDA's more severe 6-point list:
+
+- Dundahera
+- Surat Nagar
+- Bajghera
+- Dhanwapur Road (old city bus stand area)
+
+Coordinates for all nine follow the exact same methodology as every other
+row in this dataset: best-effort placement from the locality clusters the
+sources themselves describe, not a geocoding call. `coordinates_verified`
+is "No" for these nine as well.
+
+### Narsinghpur — a text-only correction, not a recalibration
+Narsinghpur (in the original 36, `confirmed_named_multi_source`,
+hypercritical) has been Gurugram's most-cited chronic waterlogging point
+for over a decade. In 2026, GMDA built a new 700m stormwater drain linked
+to the Leg-III Badshahpur drain, and reports it "worked exactly as
+designed" — Narsinghpur stayed dry through the Aug 2026 rain events and
+came off GMDA's vulnerable-spots list.
+
+Its `source_note` has been updated to record this. Its `severity_tier`
+and all four synthetic risk-model columns are **deliberately left
+unchanged**. We have a real, dated report that the underlying problem was
+fixed, but no real data on the *degree* — adjusting one row's numeric
+threshold to some specific new value with no calibration source behind it
+would be exactly the kind of false precision this document exists to
+prevent. A text correction is fully justified by direct sourcing; a
+numeric one would not be.
+
+### Full register confidence breakdown (73 rows)
+- `confirmed_named_multi_source`: 26
+- `plausible_real_unconfirmed_flood_status`: 24
+- `reconstructed_estimate`: 10
+- `confirmed_named_2026_monsoon`: 9
+- `confirmed_named_mcg_zone1`: 4
+
+**39 of 73 rows (53%) are sourced and named** — up from 30 of 64 (47%)
+before this update, because all nine additions are sourced. Still don't
+quote "73 hotspots" as a claim to completeness; see the table above.
+
+### Sources
+- The Tribune — "Gurugram drowns again... forces WFH order for Aug 25" (2026)
+- The Tribune — "97mm rain leaves Gurugram flooded; Old city reels under
+  waterlogging" (2026)
+- New Kerala / ANI — "Gurugram identifies 155 waterlogging-prone points:
+  Municipal Corporation Gurugram" (9 Aug 2026) — MCG Commissioner Pradeep
+  Dahiya quoted directly
+- The Tribune — "Narsinghpur beats decade-long waterlogging; Gurugram
+  hotspots drop from 7 to 6" (2026) — GMDA CEO P.C. Meena quoted directly
+- The Tribune — "Gurugram's poster child for waterlogging Narsinghpur
+  rises above decade-old tag" (2026)
+
+## 10. Regenerating the 2026 monsoon update
+Run `python3 data/generate_2026_monsoon_update.py` from the **`backend/`**
+directory *after* `generate_expansion.py` has produced
+`hotspots_extended.csv` — it reads that file as input. Seed is fixed (44).
+Edit `NEW_HYPERCRITICAL`, `NEW_MODERATE`, or `CORRECTIONS` in that file to
+correct or extend; don't hand-edit the CSVs. Regenerating the full
+register from scratch is therefore a three-step chain:
+
+```bash
+cd backend
+python3 data/generate_hotspots.py
+python3 data/generate_expansion.py
+python3 data/generate_2026_monsoon_update.py
+```

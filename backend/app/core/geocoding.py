@@ -2,7 +2,7 @@
 FloodCast Gurugram — Geocoding Module
 =======================================
 Place-name resolution with a clear priority order:
-  1. Exact match in hotspot dataset (64 entries)
+  1. Exact match in hotspot dataset (73 entries)
   2. Exact match in attractions dataset (8 entries)
   3. Fuzzy match across both datasets
   4. Nominatim free geocoding (rate-limited, cached) with "Gurugram" context

@@ -233,7 +233,7 @@ def _point_verdict(state: Dict[str, Any]) -> str:
     if not hotspots:
         return (
             "No hotspot in the register matches that location, so there is no "
-            "flood-risk assessment for it. The register covers 64 points across "
+            "flood-risk assessment for it. The register covers 73 points across "
             "Gurugram — try a nearby chowk, sector or main road."
         )
 

@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     )
 
     # --- Geocoding fallback -------------------------------------------
-    # Only used for place names absent from the 64-hotspot and 8-landmark
+    # Only used for place names absent from the 73-hotspot and 8-landmark
     # tables. Nominatim's usage policy requires a real contact address and
     # returns 403 for placeholder domains, so set this before depending on
     # the fallback in production.
@@ -104,7 +104,7 @@ class Settings(BaseSettings):
     # --- Data paths ---------------------------------------------------
     hotspots_parquet_path: str = Field(
         default="data/hotspots_extended.parquet",
-        description="Path to the 64-row hotspot register",
+        description="Path to the 73-row hotspot register",
     )
     attractions_parquet_path: str = Field(
         default="data/attractions.parquet",

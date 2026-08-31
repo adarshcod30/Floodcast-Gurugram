@@ -25,15 +25,19 @@ def _find_data_dir() -> Path:
 
 
 class TestHotspotsParquet:
-    def test_row_count_64(self):
-        """hotspots_extended.parquet must have exactly 64 rows."""
+    def test_row_count_73(self):
+        """hotspots_extended.parquet must have exactly 73 rows.
+
+        64 from the base register + expansion, plus 9 from the 2026
+        monsoon update — see DATA_PROVENANCE.md section 9.
+        """
         data_dir = _find_data_dir()
         conn = duckdb.connect(":memory:")
         result = conn.execute(
             f"SELECT COUNT(*) FROM read_parquet('{data_dir}/hotspots_extended.parquet')"
         ).fetchone()
         conn.close()
-        assert result[0] == 64, f"Expected 64 hotspot rows, got {result[0]}"
+        assert result[0] == 73, f"Expected 73 hotspot rows, got {result[0]}"
 
     def test_required_columns_exist(self):
         """All required columns must be present."""
@@ -68,7 +72,7 @@ class TestHotspotsParquet:
             f"SELECT COUNT(DISTINCT hotspot_id) FROM read_parquet('{data_dir}/hotspots_extended.parquet')"
         ).fetchone()
         conn.close()
-        assert result[0] == 64, f"Non-unique hotspot IDs: {result[0]} unique out of 64"
+        assert result[0] == 73, f"Non-unique hotspot IDs: {result[0]} unique out of 73"
 
     def test_data_confidence_values(self):
         """data_confidence must be one of the documented values."""
@@ -82,6 +86,7 @@ class TestHotspotsParquet:
         valid_values = {
             "confirmed_named_mcg_zone1",
             "confirmed_named_multi_source",
+            "confirmed_named_2026_monsoon",
             "plausible_real_unconfirmed_flood_status",
             "reconstructed_estimate",
         }
@@ -91,7 +96,7 @@ class TestHotspotsParquet:
         )
 
     def test_confidence_distribution(self):
-        """Confidence distribution must match DATA_PROVENANCE.md section 6."""
+        """Confidence distribution must match DATA_PROVENANCE.md section 9."""
         data_dir = _find_data_dir()
         conn = duckdb.connect(":memory:")
         result = conn.execute(
@@ -104,6 +109,7 @@ class TestHotspotsParquet:
         counts = {row[0]: row[1] for row in result}
         assert counts.get("confirmed_named_mcg_zone1", 0) == 4
         assert counts.get("confirmed_named_multi_source", 0) == 26
+        assert counts.get("confirmed_named_2026_monsoon", 0) == 9
         assert counts.get("plausible_real_unconfirmed_flood_status", 0) == 24
         assert counts.get("reconstructed_estimate", 0) == 10
 

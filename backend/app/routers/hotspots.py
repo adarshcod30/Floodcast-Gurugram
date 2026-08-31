@@ -1,7 +1,7 @@
 """
 FloodCast Gurugram — Hotspots Endpoint
 ========================================
-GET /api/v1/hotspots — returns all 64 hotspots with their current
+GET /api/v1/hotspots — returns all 73 hotspots with their current
 computed risk score, time window, AND data_confidence tier.
 """
 
@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/v1", tags=["Hotspots"])
 @router.get("/hotspots", response_model=HotspotsListResponse)
 async def list_hotspots():
     """
-    Return all 64 hotspots with current computed risk and time windows.
+    Return all 73 hotspots with current computed risk and time windows.
 
     Risk scores are computed against the latest cached weather forecast.
     Each hotspot includes its data_confidence tier so the frontend can
