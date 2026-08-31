@@ -7,6 +7,15 @@
 # The service runs fine with NO secrets set at all — Open-Meteo needs no
 # key and the chat pipeline falls back to deterministic rules without AWS
 # credentials. Both blocks below are upgrades, not prerequisites.
+#
+# If deploying via Render's native-Python runtime instead of this Docker
+# blueprint (e.g. tooling that doesn't support `runtime: docker`), also
+# set PYTHON_VERSION to a 3.11.x release. Render's native-Python default
+# has, at various points, been newer than any published pydantic-core
+# wheel — pip then falls back to compiling it from source via maturin,
+# which fails outright in Render's build sandbox (its Cargo cache
+# directory is read-only). This Docker path is unaffected: the image
+# pins python:3.11-slim itself.
 
 services:
   - type: web
