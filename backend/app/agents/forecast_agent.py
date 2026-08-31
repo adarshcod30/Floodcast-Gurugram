@@ -66,9 +66,13 @@ async def run_forecast_agent(state: Dict[str, Any]) -> Dict[str, Any]:
                 )
 
         if windows_summary:
+            # A backslash inside an f-string expression only became legal in
+            # Python 3.12 (PEP 701); the join is pulled out so this still
+            # parses on 3.11, which is what production actually runs.
+            windows_text = "\n".join(windows_summary)
             prompt = (
                 f"Here is the rainfall forecast for Gurugram:\n"
-                f"{'\\n'.join(windows_summary)}\n\n"
+                f"{windows_text}\n\n"
                 f"Current/peak intensity: {intensity:.1f} mm/hr\n"
                 f"Expected rain duration: {duration:.1f} hours\n\n"
                 f"Analyze this forecast data."
