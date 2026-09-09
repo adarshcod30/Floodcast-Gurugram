@@ -769,3 +769,84 @@ select.field { cursor: pointer; }
   border-radius: var(--r-sm);
 }
 @keyframes shimmer { to { background-position: -200% 0; } }
+
+/* ── Rainfall simulator ──────────────────────────────────────────────
+   The accent here is deliberately violet, outside the IMD green / yellow
+   / orange / red palette used everywhere else. Colour in this app means a
+   warning level, and a simulated state must never be able to read as one.
+   Nothing in this block reuses a band colour. */
+.sim {
+  border-bottom: 1px solid var(--line-soft);
+  padding: 8px 16px;
+  background: var(--base);
+}
+.sim[data-active='true'] {
+  background: color-mix(in srgb, #7C5CE0 9%, var(--base));
+  border-bottom-color: #7C5CE0;
+}
+
+.sim-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sim-label { flex: none; }
+.sim[data-active='true'] .sim-label { color: #A992F0; }
+
+.sim-preset {
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.sim-preset:hover { background: var(--raised-2); color: var(--ink); }
+.sim-preset[aria-pressed='true'] {
+  border-color: #7C5CE0;
+  color: #C4B5F5;
+  background: color-mix(in srgb, #7C5CE0 18%, var(--raised));
+}
+.sim-preset .num { color: var(--ink-faint); }
+.sim-preset[aria-pressed='true'] .num { color: #A992F0; }
+
+.sim-slider {
+  flex: 1 1 140px;
+  min-width: 120px;
+  accent-color: #7C5CE0;
+  cursor: pointer;
+}
+.sim-value {
+  font-size: 12.5px;
+  color: #C4B5F5;
+  flex: none;
+  min-width: 66px;
+}
+.sim-exit {
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 3px 9px;
+  cursor: pointer;
+  flex: none;
+}
+.sim-exit:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+.sim-warn {
+  margin: 7px 0 1px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+.sim-warn strong { color: #C4B5F5; font-weight: 600; }
+
+@media (max-width: 560px) {
+  .sim { padding: 8px 12px; }
+  .sim-value { min-width: 0; }
+}

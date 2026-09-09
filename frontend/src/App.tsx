@@ -20,9 +20,12 @@ import AskPanel from './components/AskPanel';
 import MapPanel from './components/MapPanel';
 import RainTimeline from './components/RainTimeline';
 import RegisterPanel from './components/RegisterPanel';
+import Simulate from './components/Simulate';
 import Verdict from './components/Verdict';
 import { clock } from './lib/display';
-import { ATTRACTIONS, HOTSPOTS, loadAirQuality, loadSnapshot, type Snapshot } from './lib/store';
+import {
+  ATTRACTIONS, HOTSPOTS, loadAirQuality, loadSnapshot, simulate, type Snapshot,
+} from './lib/store';
 import type { AqiResult } from './lib/engine/aqi';
 import type { Hotspot, RiskLevel, TimeWindow } from './types';
 
@@ -51,6 +54,8 @@ export default function App() {
   const [showLandmarks, setShowLandmarks] = useState(true);
   const [showWatchlist, setShowWatchlist] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  /** Simulated rainfall in mm/hr, or null when showing the live forecast. */
+  const [simulated, setSimulated] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -72,7 +77,12 @@ export default function App() {
     void loadAirQuality().then(setAqi).catch(() => setAqi(null));
   }, []);
 
-  const frames = snapshot?.frames ?? [];
+  // A simulation replaces the frames outright rather than merging into
+  // them, so there is never a view that is half hypothetical and half real.
+  const frames = useMemo(
+    () => (simulated !== null ? simulate(simulated) : snapshot?.frames ?? []),
+    [simulated, snapshot],
+  );
 
   // Keep the selected hour valid when a refresh shortens the timeline.
   useEffect(() => {
@@ -156,6 +166,8 @@ export default function App() {
       />
 
       <RainTimeline frames={frames} selected={hour} onSelect={setHour} />
+
+      <Simulate value={simulated} onChange={setSimulated} />
 
       <nav className="tabs" role="tablist" aria-label="Views">
         {([

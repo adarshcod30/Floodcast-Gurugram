@@ -141,6 +141,33 @@ export async function loadAirQuality(): Promise<AqiResult> {
   return fetchAirQuality(GURUGRAM.lat, GURUGRAM.lon);
 }
 
+/**
+ * Score the register against a hypothetical steady rainfall.
+ *
+ * Gurugram is dry most of the year, and on a dry day the honest answer is
+ * "nothing is flooding", which reads to a first-time visitor as a broken or
+ * pointless app. This answers the question they actually have on that day:
+ * what happens to my commute when it does rain like that.
+ *
+ * It is a what-if, never a forecast, and the caller is responsible for
+ * labelling it as one. Nothing here touches the live forecast state.
+ */
+export function simulate(mmPerHr: number, hours = TIMELINE_HOURS): TimelineFrame[] {
+  const now = new Date();
+  const topOfHour = new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000);
+
+  // One extra window so the last frame still has an episode to run into,
+  // rather than appearing to clear early because the data simply stops.
+  const windows = Array.from({ length: hours + 1 }, (_, i) => ({
+    start: new Date(topOfHour.getTime() + i * 3_600_000),
+    end: new Date(topOfHour.getTime() + (i + 1) * 3_600_000),
+    intensityMmPerHr: mmPerHr,
+    description: 'Simulated rainfall',
+  }));
+
+  return framesToResponse(projectTimeline(HOTSPOTS, windows, hours, now));
+}
+
 // ---------------------------------------------------------------------------
 // Ask: deterministic question answering
 // ---------------------------------------------------------------------------

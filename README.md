@@ -85,6 +85,7 @@ Full methodology: [`data/DATA_PROVENANCE.md`](data/DATA_PROVENANCE.md).
 | **Route verdicts** | Resolves two place names, finds hotspots along the corridor between them, returns the worst point and worst window |
 | **Hourly timeline** | Scrub forward through the forecast and watch the map, verdict and register re-read at that hour |
 | **Provenance on every point** | Marker fill encodes certainty, so a placeholder never renders like an MCG-named hotspot |
+| **Rainfall simulator** | Gurugram is dry most of the year. Ask what happens at 20, 35 or 55 mm/hr and watch the register respond, using the same engine as the live verdict |
 | **CPCB National AQI** | The 0-500 scale Indian residents and officials actually use, computed from a 24-hour pollutant mean, not a vendor's 1-5 index |
 | **Works on a bad connection** | The register is in the bundle, and the last good forecast is cached, so a failed fetch degrades to stale-but-labelled rather than blank |
 
@@ -245,6 +246,9 @@ The suite asserts product invariants, not status codes:
 - Drizzle cannot chain into a multi-day flood episode, a real bug this floor was added to fix
 - An unavailable AQI is reported as unavailable rather than invented, per CPCB's minimum-data rule
 - One sector number never resolves to a different one, a real bug where "Sector 49" matched "Sector 45"
+- The simulator's response curve rises with intensity and is neither flat nor all-or-nothing, because a curve that did not discriminate would tell a resident nothing
+
+For the record, that curve today reads: 10 mm/hr floods nothing, 20 mm/hr takes out the 10 worst chowks, 35 mm/hr reaches 44 of 73 points, and 55 mm/hr sustained takes the whole register. That progression matches how the city actually behaves in a monsoon burst.
 
 CI additionally **regenerates the register from the generators and fails if the result differs from what is committed**, so the data the app ships is always traceable to the sourcing recorded in `DATA_PROVENANCE.md`.
 

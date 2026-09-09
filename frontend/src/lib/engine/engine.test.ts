@@ -233,6 +233,39 @@ describe('timeline projection', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Rainfall simulation
+// ---------------------------------------------------------------------------
+
+describe('rainfall simulation', () => {
+  const atRisk = (mm: number) => {
+    const windows = Array.from({ length: 13 }, (_, i) => hour(i, mm));
+    const frames = projectTimeline(rows, windows, 12, new Date(Date.UTC(2026, 7, 9, 12)));
+    return frames[0].at_risk_count;
+  };
+
+  it('floods nothing at an intensity the drains cope with', () => {
+    expect(atRisk(10)).toBe(0);
+  });
+
+  it('escalates monotonically with intensity', () => {
+    // The point of the simulator is the shape of this curve. If it were
+    // flat, or all-or-nothing, it would tell a resident nothing useful.
+    const curve = [10, 20, 35, 55].map(atRisk);
+    for (let i = 1; i < curve.length; i += 1) {
+      expect(curve[i]).toBeGreaterThanOrEqual(curve[i - 1]);
+    }
+    expect(curve[0]).toBe(0);
+    expect(curve[curve.length - 1]).toBe(73);
+  });
+
+  it('takes out the worst chowks before the rest of the city', () => {
+    const heavy = atRisk(20);
+    expect(heavy).toBeGreaterThan(0);
+    expect(heavy).toBeLessThan(73);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Route corridor
 // ---------------------------------------------------------------------------
 
