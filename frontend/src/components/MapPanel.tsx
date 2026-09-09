@@ -18,7 +18,7 @@
  * claim about them.
  */
 
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { CircleMarker, MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -67,25 +67,49 @@ function fillFor(confidence: Confidence): { fillOpacity: number; dashArray?: str
 /**
  * Frame the map on the data, and keep it framed when the pane resizes.
  *
- * A fixed centre and zoom is wrong on two counts: it shows most of NCR
- * on a wide screen, and Leaflet caches the container size at mount, so
- * a map that mounts inside a hidden tab renders into stale dimensions
- * and needs invalidateSize() once it is actually visible.
+ * A fixed centre and zoom is wrong on two counts: it shows most of NCR on a
+ * wide screen, and Leaflet caches the container size at mount, so a map that
+ * mounts before layout settles renders into stale dimensions.
+ *
+ * That stale size is not a cosmetic problem. Leaflet derives the fitBounds
+ * zoom from the container size, so calling it against a zero-height
+ * container makes getBoundsZoom conclude that nothing fits and drop to zoom
+ * 0: the whole world, with all 73 points in a single pixel. invalidateSize()
+ * alone does not recover from it, because resizing does not re-run the fit.
+ * So the fit is deferred until the container actually has a size, and re-run
+ * whenever that size changes.
  */
 function FitToData({ points }: { points: Array<[number, number]> }) {
   const map = useMap();
+  // Held in a ref so the resize observer can re-fit against current data
+  // without being torn down and rebuilt every time the forecast ticks.
+  const pointsRef = useRef(points);
+  pointsRef.current = points;
 
-  useEffect(() => {
-    if (points.length === 0) return;
-    map.fitBounds(L.latLngBounds(points).pad(0.08), { animate: false });
-  }, [map, points]);
+  const fit = useCallback(() => {
+    const pts = pointsRef.current;
+    if (pts.length === 0) return;
 
-  useEffect(() => {
     const el = map.getContainer();
-    const observer = new ResizeObserver(() => map.invalidateSize({ animate: false }));
-    observer.observe(el);
-    return () => observer.disconnect();
+    // Fitting into a zero-size container is what produces the zoom-0 bug.
+    if (el.clientWidth === 0 || el.clientHeight === 0) return;
+
+    map.invalidateSize({ animate: false });
+    map.fitBounds(L.latLngBounds(pts).pad(0.08), { animate: false });
   }, [map]);
+
+  // Re-fit only when the visible set changes, never on a risk update, so
+  // scrubbing the timeline does not yank the view back from wherever the
+  // user has panned to.
+  useEffect(() => {
+    fit();
+  }, [fit, points]);
+
+  useEffect(() => {
+    const observer = new ResizeObserver(() => fit());
+    observer.observe(map.getContainer());
+    return () => observer.disconnect();
+  }, [map, fit]);
 
   return null;
 }
@@ -101,11 +125,18 @@ export default function MapPanel({
 }: Props) {
   const visible = showWatchlist ? hotspots : hotspots.filter((h) => isSourced(h.data_confidence));
 
-  // Frame on the register itself, so the view is always "Gurugram's
-  // flood points" rather than an arbitrary slice of NCR.
+  // Frame on the register itself, so the view is always "Gurugram's flood
+  // points" rather than an arbitrary slice of NCR.
+  //
+  // Keyed on which points are visible, not on the hotspot objects: those get
+  // new identities every time the forecast refreshes or the timeline is
+  // scrubbed, and re-fitting on each of those would repeatedly snap the map
+  // away from wherever the user had panned.
+  const boundsKey = visible.map((h) => h.hotspot_id).join(',');
   const bounds = useMemo(
     () => visible.map((h) => [h.latitude, h.longitude] as [number, number]),
-    [visible],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [boundsKey],
   );
 
   return (

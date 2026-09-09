@@ -1,15 +1,19 @@
 /**
- * Ask — natural-language point and route questions.
+ * Ask: point and route questions.
  *
- * Every answer shows which hotspots it reasoned over and at what
- * provenance tier, so the verdict is auditable rather than a black box.
- * It also shows whether the answer came from the LLM or the
- * deterministic engine: a user is entitled to know which one is talking.
+ * Every answer shows which hotspots it reasoned over and at what provenance
+ * tier, so the verdict is auditable rather than a black box.
+ *
+ * Answers are computed on the device from the same scoring the map uses.
+ * The deployed backend never had model credentials, so it always ran this
+ * same deterministic path; making that explicit costs nothing and removes
+ * the round trip.
  */
 
 import { useEffect, useRef, useState } from 'react';
 
-import { ApiError, api } from '../lib/api';
+import { ask } from '../lib/store';
+import type { Snapshot } from '../lib/store';
 import { BAND, CONFIDENCE, renderEmphasis } from '../lib/display';
 import type { ChatResponse } from '../types';
 
@@ -27,7 +31,7 @@ const STARTERS = [
   'Golf Course Road to MG Road — safe to drive?',
 ];
 
-export default function AskPanel() {
+export default function AskPanel({ snapshot }: { snapshot: Snapshot | null }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -47,15 +51,16 @@ export default function AskPanel() {
     setBusy(true);
 
     try {
-      const answer = await api.ask(question);
+      if (!snapshot) {
+        throw new Error('The rainfall forecast is still loading. Try again in a moment.');
+      }
+      // Resolving a place can touch the network (Nominatim), so this is
+      // awaited rather than assumed instant.
+      const answer = await ask(question, snapshot);
       setTurns((t) => [...t, { id: id + 1, role: 'app', text: answer.verdict, answer }]);
     } catch (err) {
       const message =
-        err instanceof ApiError && err.status === 429
-          ? 'That is more questions than the rate limit allows. Wait a minute and ask again.'
-          : err instanceof ApiError
-            ? err.message
-            : 'Could not reach the server.';
+        err instanceof Error ? err.message : 'Could not work out an answer for that.';
       setTurns((t) => [...t, { id: id + 1, role: 'app', text: message }]);
     } finally {
       setBusy(false);
@@ -151,9 +156,7 @@ function Answer({ turn }: { turn: Turn }) {
 
       {a && (
         <div className="msg-meta">
-          <span className="chip" data-tone={a.method.startsWith('llm') ? 'llm' : undefined}>
-            {a.method.startsWith('llm') ? 'AI verdict' : 'Rule-based verdict'}
-          </span>
+          <span className="chip">Rule-based, computed on your device</span>
           {a.route_analysis && (
             <span className="chip">
               straight-line corridor · {a.route_analysis.hotspot_count} points ·{' '}

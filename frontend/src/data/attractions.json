@@ -1,0 +1,74 @@
+[
+ {
+  "name": "Kingdom of Dreams",
+  "category": "Entertainment",
+  "locality": "Sector 29",
+  "lat": 28.467,
+  "lon": 77.068,
+  "source": "Multiple tourism sources — India's first live entertainment/theatre destination",
+  "poi_id": "FCG-POI-01"
+ },
+ {
+  "name": "Cyber Hub",
+  "category": "Dining & Nightlife",
+  "locality": "DLF Phase 2",
+  "lat": 28.495,
+  "lon": 77.09,
+  "source": "Multiple tourism sources — major F&B/entertainment complex, adjacent to Cyber City hotspot",
+  "poi_id": "FCG-POI-02"
+ },
+ {
+  "name": "Ambience Mall",
+  "category": "Shopping",
+  "locality": "NH-8 / Delhi border",
+  "lat": 28.501,
+  "lon": 77.094,
+  "source": "Multiple tourism sources — one of the largest malls in the country",
+  "poi_id": "FCG-POI-03"
+ },
+ {
+  "name": "Leisure Valley Park",
+  "category": "Park",
+  "locality": "Sector 29",
+  "lat": 28.465,
+  "lon": 77.063,
+  "source": "Multiple tourism sources — 101-acre urban park with musical fountains",
+  "poi_id": "FCG-POI-04"
+ },
+ {
+  "name": "Aravalli Biodiversity Park",
+  "category": "Park / Nature",
+  "locality": "Near Guru Dronacharya Metro",
+  "lat": 28.475,
+  "lon": 77.098,
+  "source": "Multiple tourism sources — 380-acre ecological restoration park",
+  "poi_id": "FCG-POI-05"
+ },
+ {
+  "name": "Sheetla Mata Mandir",
+  "category": "Religious",
+  "locality": "Gurgaon-Sohna Road",
+  "lat": 28.423,
+  "lon": 77.035,
+  "source": "Multiple tourism sources — one of the most revered temples in the region",
+  "poi_id": "FCG-POI-06"
+ },
+ {
+  "name": "Galleria Market",
+  "category": "Shopping",
+  "locality": "DLF Phase 4",
+  "lat": 28.47,
+  "lon": 77.1,
+  "source": "Multiple tourism sources — boutique/cafe shopping district",
+  "poi_id": "FCG-POI-07"
+ },
+ {
+  "name": "Sultanpur National Park",
+  "category": "Park / Nature",
+  "locality": "Farrukhnagar Road (edge of city)",
+  "lat": 28.46,
+  "lon": 76.895,
+  "source": "Multiple tourism sources — bird sanctuary, ~15km from central Gurugram",
+  "poi_id": "FCG-POI-08"
+ }
+]

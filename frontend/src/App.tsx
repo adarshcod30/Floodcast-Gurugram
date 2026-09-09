@@ -2,14 +2,15 @@
  * App shell.
  *
  * Reading order is the product's argument, top to bottom:
- *   verdict → timeline → detail
- * Answer first, the time axis that produced it second, supporting
- * evidence last. A user who reads only the first band has what they
- * came for.
+ *   verdict -> timeline -> detail
+ * Answer first, the time axis that produced it second, supporting evidence
+ * last. Someone who reads only the first band has what they came for.
  *
- * State note: this component holds NO scoring logic. The selected hour
- * indexes into server-computed timeline frames; risk values are read,
- * never derived.
+ * There is no loading gate on the register any more. The 73 hotspots and the
+ * 8 landmarks are compiled into the bundle, so the map and the list are on
+ * screen before any network request is made. Only the rainfall numbers wait
+ * on the network, and if that fails the locations still render, clearly
+ * marked as having no forecast behind them.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -19,90 +20,59 @@ import AskPanel from './components/AskPanel';
 import MapPanel from './components/MapPanel';
 import RainTimeline from './components/RainTimeline';
 import RegisterPanel from './components/RegisterPanel';
-import ReportsPanel from './components/ReportsPanel';
 import Verdict from './components/Verdict';
-import { ApiError, api } from './lib/api';
 import { clock } from './lib/display';
-import type {
-  AirQualityResponse,
-  Attraction,
-  CitizenReport,
-  ForecastResponse,
-  Hotspot,
-  RiskLevel,
-  TimelineFrame,
-} from './types';
+import { ATTRACTIONS, HOTSPOTS, loadAirQuality, loadSnapshot, type Snapshot } from './lib/store';
+import type { AqiResult } from './lib/engine/aqi';
+import type { Hotspot, RiskLevel, TimeWindow } from './types';
 
-type Tab = 'map' | 'register' | 'ask' | 'reports' | 'about';
+type Tab = 'map' | 'register' | 'ask' | 'about';
 
-/** Forecast refresh interval. The backend caches hourly, so polling
- *  faster than this only moves bytes without moving numbers. */
-const REFRESH_MS = 5 * 60 * 1000;
+/** Open-Meteo publishes hourly, so polling faster only moves bytes. */
+const REFRESH_MS = 10 * 60 * 1000;
+
+/** The register, rendered before any forecast exists. Risk fields read zero
+ *  and the UI says why, rather than implying a computed all-clear. */
+const UNSCORED: Hotspot[] = HOTSPOTS.map((h) => ({
+  ...h,
+  risk_score: 0,
+  risk_level: 'low' as RiskLevel,
+  time_window: null,
+  intensity_ratio: 0,
+  forecast_intensity_mm_hr: 0,
+  threshold_mm_hr: h.rainfall_threshold_mm_per_hr,
+}));
 
 export default function App() {
-  const [hotspots, setHotspots] = useState<Hotspot[]>([]);
-  const [attractions, setAttractions] = useState<Attraction[]>([]);
-  const [frames, setFrames] = useState<TimelineFrame[]>([]);
-  const [forecast, setForecast] = useState<ForecastResponse | null>(null);
-  const [aqi, setAqi] = useState<AirQualityResponse | null>(null);
-  const [reports, setReports] = useState<CitizenReport[]>([]);
-
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [aqi, setAqi] = useState<AqiResult | null>(null);
   const [hour, setHour] = useState(0);
   const [tab, setTab] = useState<Tab>('map');
   const [showLandmarks, setShowLandmarks] = useState(true);
   const [showWatchlist, setShowWatchlist] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [phase, setPhase] = useState<'boot' | 'waking' | 'ready' | 'failed'>('boot');
-  const [failure, setFailure] = useState<string | null>(null);
-
-  const loadReports = useCallback(async () => {
+  const load = useCallback(async () => {
+    setRefreshing(true);
     try {
-      setReports((await api.reports()).reports);
-    } catch {
-      /* Reports are supplementary; their absence must not break the app. */
+      setSnapshot(await loadSnapshot());
+    } finally {
+      setRefreshing(false);
     }
   }, []);
 
-  const load = useCallback(async (first: boolean) => {
-    try {
-      if (first) {
-        setPhase('boot');
-        // A slow /health means Render's free tier is waking a sleeping
-        // service. Saying so beats a spinner that looks like a hang.
-        await api.health(() => setPhase('waking'));
-      }
-
-      const [h, a, t, f, q] = await Promise.all([
-        api.hotspots(),
-        api.attractions(),
-        api.timeline(),
-        api.forecast(),
-        api.airQuality(),
-      ]);
-
-      setHotspots(h.hotspots);
-      setAttractions(a.attractions);
-      setFrames(t.frames);
-      setForecast(f);
-      setAqi(q);
-      setPhase('ready');
-      setFailure(null);
-      void loadReports();
-    } catch (err) {
-      // A failed refresh must not blank a working screen — only a failed
-      // first load is fatal.
-      if (first) {
-        setFailure(err instanceof ApiError ? err.message : 'Could not reach the server.');
-        setPhase('failed');
-      }
-    }
-  }, [loadReports]);
-
   useEffect(() => {
-    void load(true);
-    const id = setInterval(() => void load(false), REFRESH_MS);
+    void load();
+    const id = setInterval(() => void load(), REFRESH_MS);
     return () => clearInterval(id);
   }, [load]);
+
+  // Air quality is secondary, so it never blocks the flood answer.
+  useEffect(() => {
+    void loadAirQuality().then(setAqi).catch(() => setAqi(null));
+  }, []);
+
+  const frames = snapshot?.frames ?? [];
 
   // Keep the selected hour valid when a refresh shortens the timeline.
   useEffect(() => {
@@ -115,7 +85,7 @@ export default function App() {
   const riskAt = useMemo(() => {
     const m = new Map<
       string,
-      { risk_level: RiskLevel; risk_score: number; time_window: { starts_at: string; clears_by: string } | null }
+      { risk_level: RiskLevel; risk_score: number; time_window: TimeWindow | null }
     >();
     for (const r of frame?.risks ?? []) {
       m.set(r.hotspot_id, {
@@ -127,40 +97,31 @@ export default function App() {
     return m;
   }, [frame]);
 
+  /** Hotspots carrying the selected hour's risk, so scrubbing the timeline
+   *  moves the map and the register together. */
+  const hotspots = useMemo(() => {
+    const base = snapshot?.hotspots ?? UNSCORED;
+    if (!frame) return base;
+    return base.map((h) => {
+      const r = riskAt.get(h.hotspot_id);
+      return r
+        ? { ...h, risk_score: r.risk_score, risk_level: r.risk_level, time_window: r.time_window }
+        : h;
+    });
+  }, [snapshot, frame, riskAt]);
+
   const worst = frame?.risks.find((r) => r.risk_score > 0) ?? null;
-  const worstName = worst ? hotspots.find((h) => h.hotspot_id === worst.hotspot_id)?.name ?? null : null;
+  const worstName = worst
+    ? hotspots.find((h) => h.hotspot_id === worst.hotspot_id)?.name ?? null
+    : null;
 
-  if (phase === 'boot' || phase === 'waking') {
-    return (
-      <div className="boot">
-        <div className="boot-mark">FloodCast Gurugram</div>
-        <div className="boot-gauge"><i /></div>
-        <p className="boot-msg">
-          {phase === 'waking'
-            ? 'Waking the server. It sleeps when idle on the free tier, so the first request takes up to a minute.'
-            : 'Reading the forecast and scoring 73 flood points…'}
-        </p>
-      </div>
-    );
-  }
-
-  if (phase === 'failed') {
-    return (
-      <div className="boot">
-        <div className="boot-mark">FloodCast Gurugram</div>
-        <p className="boot-msg">
-          {failure} The risk engine runs on the server, so there is nothing to show until
-          it responds.
-        </p>
-        <button className="btn" onClick={() => void load(true)}>
-          Try again
-        </button>
-      </div>
-    );
-  }
-
+  const forecast = snapshot?.forecast ?? null;
   const stale =
-    forecast?.source === 'unavailable' ? 'offline' : forecast?.source === 'fallback' ? 'true' : 'false';
+    !forecast || forecast.source === 'unavailable'
+      ? 'offline'
+      : forecast.source === 'cached'
+        ? 'true'
+        : 'false';
 
   return (
     <div className="app">
@@ -169,12 +130,21 @@ export default function App() {
           FloodCast <span>Gurugram</span>
         </div>
         <div className="rail-spacer" />
-        <div className="rail-stat">
+        <button
+          className="rail-stat"
+          onClick={() => void load()}
+          disabled={refreshing}
+          title="Refresh the rainfall forecast"
+        >
           <span className="pulse" data-stale={stale} />
-          {forecast?.source === 'unavailable'
-            ? 'forecast unavailable'
-            : `${forecast?.provider ?? 'forecast'} · ${forecast ? clock(forecast.fetched_at) : ''}`}
-        </div>
+          {refreshing
+            ? 'refreshing'
+            : !forecast
+              ? 'reading forecast'
+              : forecast.source === 'unavailable'
+                ? 'forecast unavailable'
+                : `${forecast.provider} · ${clock(forecast.fetched_at)}`}
+        </button>
       </header>
 
       <Verdict
@@ -192,7 +162,6 @@ export default function App() {
           ['map', 'Map', null],
           ['register', 'Register', hotspots.length],
           ['ask', 'Ask', null],
-          ['reports', 'Reports', reports.length || null],
           ['about', 'What’s real', null],
         ] as const).map(([key, label, count]) => (
           <button
@@ -212,7 +181,7 @@ export default function App() {
         {tab === 'map' && (
           <MapPanel
             hotspots={hotspots}
-            attractions={attractions}
+            attractions={ATTRACTIONS}
             riskAt={riskAt}
             showLandmarks={showLandmarks}
             showWatchlist={showWatchlist}
@@ -221,8 +190,7 @@ export default function App() {
           />
         )}
         {tab === 'register' && <RegisterPanel hotspots={hotspots} riskAt={riskAt} />}
-        {tab === 'ask' && <AskPanel />}
-        {tab === 'reports' && <ReportsPanel reports={reports} onChanged={loadReports} />}
+        {tab === 'ask' && <AskPanel snapshot={snapshot} />}
         {tab === 'about' && (
           <AboutPanel hotspots={hotspots} forecast={forecast} aqiBasis={aqi?.basis ?? null} />
         )}
