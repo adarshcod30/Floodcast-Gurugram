@@ -19,7 +19,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   DEPTHS, LocationError, PhotoError, communityReports, currentLocation, fileReport,
-  isConfigured, localReports, photoUrl, pickedFix, preparePhoto, previewUrl, retryFailed,
+  isConfigured, localReports, onChange, photoUrl, pickedFix, preparePhoto, previewUrl, retryFailed,
   type Fix, type PreparedPhoto, type QueuedReport, type RemoteReport,
 } from '../lib/reports';
 import LocationPicker from './LocationPicker';
@@ -48,6 +48,10 @@ export default function ReportPanel() {
 
   useEffect(() => {
     void refresh();
+    // Track the upload as it happens. Without this the card sat on
+    // "Uploading…" until the user navigated away and back, which reads as a
+    // stuck upload even when it had succeeded seconds earlier.
+    return onChange(() => void refresh());
   }, [refresh]);
 
   // An object URL leaks the blob until it is revoked.

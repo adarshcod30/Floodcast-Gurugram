@@ -25,7 +25,8 @@ import RegisterPanel from './components/RegisterPanel';
 import ReportPanel from './components/ReportPanel';
 import Simulate from './components/Simulate';
 import Verdict from './components/Verdict';
-import { clock } from './lib/display';
+import { clock, hourLabel } from './lib/display';
+import { isConfigured as reportsShared } from './lib/reports';
 import {
   ATTRACTIONS, HOTSPOTS, loadAirQuality, loadSnapshot, simulate, type Snapshot,
 } from './lib/store';
@@ -67,6 +68,24 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   /** Simulated rainfall in mm/hr, or null when showing the live forecast. */
   const [simulated, setSimulated] = useState<number | null>(null);
+
+  /** Whether the hour scrubber and simulator are expanded. Remembered,
+   *  because someone who wants the map full-height wants it every visit,
+   *  not once. */
+  const [stripOpen, setStripOpen] = useState(() => {
+    try {
+      return localStorage.getItem('floodcast.strip') !== 'closed';
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('floodcast.strip', stripOpen ? 'open' : 'closed');
+    } catch {
+      /* Private mode. A remembered preference is not worth an error. */
+    }
+  }, [stripOpen]);
 
   // Moderation lives at #moderate rather than in the tab bar: it is for one
   // person, and a review queue in the main navigation would imply visitors
@@ -212,6 +231,23 @@ export default function App() {
                   ? 'forecast unavailable'
                   : `${forecast.provider} · ${clock(forecast.fetched_at)}`}
           </button>
+
+          {/* The review queue was reachable only by knowing to type
+              #moderate, which is not a workflow. It is visible but plain:
+              anyone can click it, and only an allowlisted account gets
+              past the sign-in, which the database enforces rather than
+              this link. */}
+          {reportsShared() && (
+            <button
+              className="nav-mod"
+              onClick={() => {
+                window.location.hash = '#moderate';
+                setModerating(true);
+              }}
+            >
+              Review queue
+            </button>
+          )}
         </div>
       </nav>
 
@@ -225,12 +261,35 @@ export default function App() {
           simulated={simulated !== null}
         />
 
-        {hourly && (
-          <>
-            <RainTimeline frames={frames} selected={hour} onSelect={setHour} />
-            <Simulate value={simulated} onChange={setSimulated} />
-          </>
-        )}
+        {hourly &&
+          (stripOpen ? (
+            <>
+              <RainTimeline frames={frames} selected={hour} onSelect={setHour} />
+              <Simulate value={simulated} onChange={setSimulated} />
+              <button
+                className="strip-toggle"
+                onClick={() => setStripOpen(false)}
+                aria-expanded={true}
+              >
+                Hide forecast controls
+              </button>
+            </>
+          ) : (
+            <button
+              className="strip-toggle strip-toggle-closed"
+              onClick={() => setStripOpen(true)}
+              aria-expanded={false}
+            >
+              <span className="label">Rainfall timeline</span>
+              <span className="strip-peak">
+                {frame
+                  ? `${hourLabel(frame.start_time)} · ${frame.intensity_mm_per_hr.toFixed(1)} mm/hr · ${frame.at_risk_count} at risk`
+                  : 'no forecast'}
+                {simulated !== null && ' · simulated'}
+              </span>
+              <span className="strip-chev">Show</span>
+            </button>
+          ))}
 
         <main className="view">
           {tab === 'map' && (

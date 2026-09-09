@@ -1240,3 +1240,196 @@ select.field { cursor: pointer; }
     scroll-snap-align: start;
   }
 }
+
+/* ── Collapsing the forecast controls ─────────────────────────────
+   The hour scrubber and simulator are the point of this tool, but once
+   you have read them you mostly want the map. Collapsed, they become one
+   28px line that still states the hour, the rainfall and the count, so
+   folding them away never costs you the answer. */
+.strip-toggle {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 20px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--ink-faint);
+  background: var(--base);
+  border: none;
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+  text-align: left;
+}
+.strip-toggle:hover { color: var(--ink-dim); background: var(--raised); }
+
+.strip-toggle-closed { padding: 8px 20px; }
+.strip-peak {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+.strip-chev {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ink-faint);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 1px 8px;
+}
+.strip-toggle:hover .strip-chev { color: var(--ink); border-color: var(--ink-faint); }
+
+@media (max-width: 860px) {
+  .strip-toggle { padding: 6px 14px; }
+  .strip-toggle-closed { padding: 8px 14px; }
+  .strip-peak { font-size: 10.5px; }
+}
+
+/* ── Provenance page ─────────────────────────────────────────────── */
+.prov-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.prov-big {
+  font-size: 34px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.prov-of { font-size: 13.5px; color: var(--ink-dim); }
+
+/* Proportion at a glance. Sourced tiers read solid, unconfirmed ones
+   hollow, which is the same encoding the map markers use. */
+.prov-bar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  margin-bottom: 16px;
+}
+.prov-seg { border-radius: 2px; background: var(--line); }
+.prov-seg[data-sourced='true'] { background: var(--ink-dim); }
+
+.prov-table { width: 100%; border-collapse: collapse; }
+.prov-table td {
+  padding: 8px 8px 8px 0;
+  border-top: 1px solid var(--line-soft);
+  vertical-align: baseline;
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+.prov-table tr:first-child td { border-top: none; }
+.prov-n {
+  width: 40px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.prov-tier {
+  width: 168px;
+  color: var(--ink);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.prov-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 7px;
+  border: 1.5px solid var(--ink-dim);
+}
+.prov-dot[data-sourced='true'] { background: var(--ink-dim); }
+.prov-blurb { line-height: 1.5; }
+.prov-caveat {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-faint);
+}
+
+/* ── Disclosure sections ──────────────────────────────────────────
+   Native <details>, so it works without JavaScript and is keyboard and
+   screen-reader correct for free. */
+.disc {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+  background: var(--raised);
+}
+.disc > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  list-style: none;
+}
+.disc > summary::-webkit-details-marker { display: none; }
+.disc > summary::after {
+  content: '+';
+  margin-left: auto;
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+.disc[open] > summary::after { content: '\2212'; }
+.disc > summary:hover { background: var(--raised-2); border-radius: var(--r); }
+.disc[open] > summary { border-bottom: 1px solid var(--line-soft); border-radius: var(--r) var(--r) 0 0; }
+
+.disc p {
+  padding: 0 14px;
+  margin: 11px 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--ink-dim);
+}
+.disc p strong { color: var(--ink); font-weight: 600; }
+.disc p code {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11.5px;
+  background: var(--raised-2);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.disc-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+.disc-tag[data-tone='warn'] { border-color: var(--imd-orange); color: var(--imd-orange); }
+.disc-tag[data-tone='ok']   { border-color: var(--imd-green);  color: var(--imd-green); }
+
+@media (max-width: 620px) {
+  .prov-table td { font-size: 12px; }
+  .prov-tier { width: auto; white-space: normal; }
+  .prov-blurb { display: none; }
+}
+
+.nav-mod {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  color: var(--ink-faint);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.nav-mod:hover { color: var(--ink-dim); text-decoration: underline; }

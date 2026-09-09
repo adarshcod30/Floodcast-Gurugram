@@ -133,8 +133,25 @@ export async function fileReport(draft: Draft): Promise<db.QueuedReport> {
   };
 
   await db.put(row);
+  emit();
   void sync();
   return row;
+}
+
+// Anyone rendering the queue needs to know when a row's status changes.
+// Without this the card sat on "Uploading…" until the user navigated away
+// and back, which reads as a stuck upload even when it succeeded seconds
+// earlier. That is exactly the moment someone decides the feature is broken.
+type Listener = () => void;
+const listeners = new Set<Listener>();
+
+export function onChange(fn: Listener): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+function emit(): void {
+  for (const fn of listeners) fn();
 }
 
 let syncing = false;
@@ -154,6 +171,7 @@ export async function sync(): Promise<void> {
     for (const row of await db.pending()) {
       try {
         await db.put({ ...row, status: 'uploading' });
+        emit();
 
         const path = row.photo ? await remote.uploadPhoto(row.photo, row.id) : null;
         await remote.insertReport({
@@ -170,6 +188,7 @@ export async function sync(): Promise<void> {
         // them: the server does not hand back the row it just accepted,
         // because a pending row is not readable by an anonymous caller.
         await db.put({ ...row, status: 'sent', photo: row.photo });
+        emit();
       } catch (err) {
         await db.put({
           ...row,
@@ -177,6 +196,7 @@ export async function sync(): Promise<void> {
           attempts: row.attempts + 1,
           last_error: err instanceof Error ? err.message : 'Upload failed',
         });
+        emit();
       }
     }
   } finally {
