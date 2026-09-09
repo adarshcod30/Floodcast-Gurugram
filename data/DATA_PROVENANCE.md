@@ -73,7 +73,7 @@ that swapping synthetic values for real, spot-calibrated ones later is a
 data update, not a code rewrite.
 
 ## 5. Regenerating this dataset
-Run `python3 data/generate_hotspots.py` from the **`backend/`** directory
+Run `python3 data/generate_hotspots.py` from the **repository root**
 (the script writes to relative path `data/hotspots.csv`, so it must be run
 from one level up). The random seed is fixed (42), so the synthetic
 columns are reproducible — re-running produces byte-identical output.
@@ -125,7 +125,7 @@ no severity tier, no synthetic risk fields, and should never be joined
 into the hotspot risk logic as if they were hotspots.
 
 ## 8. Regenerating the expansion
-Run `python3 data/generate_expansion.py` from the **`backend/`** directory
+Run `python3 data/generate_expansion.py` from the **repository root**
 *after* `generate_hotspots.py` has already produced `hotspots.csv` — it
 reads that file as input. Seed is fixed (43, deliberately different from
 the base dataset's 42) for reproducibility. Edit `TIER_B`, `TIER_C`, or
@@ -247,16 +247,21 @@ quote "73 hotspots" as a claim to completeness; see the table above.
   rises above decade-old tag" (2026)
 
 ## 10. Regenerating the 2026 monsoon update
-Run `python3 data/generate_2026_monsoon_update.py` from the **`backend/`**
-directory *after* `generate_expansion.py` has produced
+Run `python3 data/generate_2026_monsoon_update.py` from the **repository
+root** *after* `generate_expansion.py` has produced
 `hotspots_extended.csv` — it reads that file as input. Seed is fixed (44).
 Edit `NEW_HYPERCRITICAL`, `NEW_MODERATE`, or `CORRECTIONS` in that file to
 correct or extend; don't hand-edit the CSVs. Regenerating the full
-register from scratch is therefore a three-step chain:
+register from scratch is therefore a four-step chain, the last stage
+exporting the JSON the app actually ships:
 
 ```bash
-cd backend
 python3 data/generate_hotspots.py
 python3 data/generate_expansion.py
 python3 data/generate_2026_monsoon_update.py
+python3 data/export_to_frontend.py
 ```
+
+CI runs exactly this chain on every push and fails if the result differs
+from what is committed, so the register the app ships can always be traced
+back to the sourcing recorded here.

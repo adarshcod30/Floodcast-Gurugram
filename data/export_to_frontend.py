@@ -13,7 +13,7 @@ from sleep (measured: 42 seconds) before they could see anything at all.
 Shipping it inside the bundle makes the first paint instant and removes the
 single largest source of failure in the deployment.
 
-Run from `backend/`:
+Run from the repository root:
 
     python3 data/export_to_frontend.py
 
@@ -31,7 +31,7 @@ import json
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent
-OUT_DIR = DATA_DIR.parent.parent / "frontend" / "src" / "data"
+OUT_DIR = DATA_DIR.parent / "frontend" / "src" / "data"
 
 EXPECTED_HOTSPOTS = 73
 EXPECTED_ATTRACTIONS = 8

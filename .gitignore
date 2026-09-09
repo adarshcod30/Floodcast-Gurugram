@@ -1,13 +1,10 @@
 # ── Secrets ─────────────────────────────────────────────────────────
 # Never commit credentials. .env.example is the committed template.
-# frontend/.env.production is also excepted: it holds only the public
-# backend URL Vite bakes into the client bundle at build time (Vercel's
-# vercel.json "env" key does not reach the Vite build step, so this is
-# the actual mechanism, not a convenience duplicate of it).
+# The app itself needs no keys at all: Open-Meteo is keyless, so there is
+# nothing to configure and nothing to leak.
 .env
 .env.*
 !.env.example
-!frontend/.env.production
 
 # ── Python ──────────────────────────────────────────────────────────
 __pycache__/
