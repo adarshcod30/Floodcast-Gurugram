@@ -86,6 +86,8 @@ Full methodology: [`data/DATA_PROVENANCE.md`](data/DATA_PROVENANCE.md).
 | **Hourly timeline** | Scrub forward through the forecast and watch the map, verdict and register re-read at that hour |
 | **Provenance on every point** | Marker fill encodes certainty, so a placeholder never renders like an MCG-named hotspot |
 | **Rainfall simulator** | Gurugram is dry most of the year. Ask what happens at 20, 35 or 55 mm/hr and watch the register respond, using the same engine as the live verdict |
+| **Citizen reports** | Camera photo, GPS fix with its accuracy, and a depth. Saved on the device first so a failed upload never loses it, and reviewed before anyone else sees it |
+| **Installable, works offline** | A real PWA. The register is precached, so it opens and draws all 73 points with no connection |
 | **CPCB National AQI** | The 0-500 scale Indian residents and officials actually use, computed from a 24-hour pollutant mean, not a vendor's 1-5 index |
 | **Works on a bad connection** | The register is in the bundle, and the last good forecast is cached, so a failed fetch degrades to stale-but-labelled rather than blank |
 
@@ -200,6 +202,22 @@ npm run dev
 
 Open http://localhost:5173. That is the entire setup. No keys, no `.env`, no services, no accounts.
 
+### Switching on shared reports (optional)
+
+Without this, the Report tab still works: the camera and GPS capture normally
+and everything is stored on the device. Nothing is uploaded, and the UI says
+so. To let reports be shared:
+
+1. Create a free project at [supabase.com](https://supabase.com)
+2. Run [`supabase/schema.sql`](supabase/schema.sql) in its SQL editor. This creates the table, the storage bucket, and the row level security policies that do the actual enforcing
+3. Put the project URL and anon key in `frontend/.env.local` (see [`.env.example`](frontend/.env.example)), and in your Vercel project's environment variables for production
+4. Create a moderator account under Authentication, then review submissions at `/#moderate`
+
+The anon key is public by design and safe in the bundle. An anonymous
+visitor can only ever insert a `pending` report and only ever read `approved`
+ones, and that is enforced in Postgres rather than in the client. Never ship
+the `service_role` key, which bypasses every policy.
+
 ```bash
 npm test         # 38 tests
 npm run lint
@@ -301,10 +319,12 @@ Stated plainly, because a tool that overstates its confidence is worse than no t
 
 ## Roadmap
 
-- [ ] Calibrate the four synthetic columns against real rainfall-versus-flood-report pairs
+- [x] Installable PWA with offline register access
+- [x] Citizen reports with camera, GPS and moderation
+- [ ] Calibrate the four synthetic columns against real rainfall-versus-flood-report pairs. See [`docs/GMDA_DATA.md`](docs/GMDA_DATA.md) for exactly which dataset does this and how to ask for it
+- [ ] Derive `drainage_capacity_score` from GMDA's published flow network instead of severity tier. The data is public: 4,701 stream segments with per-segment catchment areas
 - [ ] Verify the three coordinates the audit flagged (IFFCO Chowk, Rajiv Chowk, Sector 10A)
-- [ ] Installable PWA with offline register access
-- [ ] Community reports, backed by a moderated store rather than faked locally
+- [ ] Rate-limit report submission at the edge. Today abuse is bounded by moderation and a 1 MB cap, not by a limiter
 - [ ] Per-user saved routes, so the daily commute is one tap
 
 ---

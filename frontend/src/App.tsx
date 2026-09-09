@@ -19,7 +19,9 @@ import AboutPanel from './components/AboutPanel';
 import AskPanel from './components/AskPanel';
 import MapPanel from './components/MapPanel';
 import RainTimeline from './components/RainTimeline';
+import ModeratePanel from './components/ModeratePanel';
 import RegisterPanel from './components/RegisterPanel';
+import ReportPanel from './components/ReportPanel';
 import Simulate from './components/Simulate';
 import Verdict from './components/Verdict';
 import { clock } from './lib/display';
@@ -29,7 +31,7 @@ import {
 import type { AqiResult } from './lib/engine/aqi';
 import type { Hotspot, RiskLevel, TimeWindow } from './types';
 
-type Tab = 'map' | 'register' | 'ask' | 'about';
+type Tab = 'map' | 'register' | 'ask' | 'report' | 'about';
 
 /** Open-Meteo publishes hourly, so polling faster only moves bytes. */
 const REFRESH_MS = 10 * 60 * 1000;
@@ -56,6 +58,18 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   /** Simulated rainfall in mm/hr, or null when showing the live forecast. */
   const [simulated, setSimulated] = useState<number | null>(null);
+
+  // Moderation lives at #moderate rather than in the tab bar: it is for one
+  // person, and a review queue in the main navigation would imply visitors
+  // can see what is waiting. They cannot.
+  const [moderating, setModerating] = useState(
+    () => typeof window !== 'undefined' && window.location.hash === '#moderate',
+  );
+  useEffect(() => {
+    const onHash = () => setModerating(window.location.hash === '#moderate');
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
 
   const load = useCallback(async () => {
     setRefreshing(true);
@@ -133,6 +147,17 @@ export default function App() {
         ? 'true'
         : 'false';
 
+  if (moderating) {
+    return (
+      <ModeratePanel
+        onClose={() => {
+          window.location.hash = '';
+          setModerating(false);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="app">
       <header className="rail">
@@ -174,6 +199,7 @@ export default function App() {
           ['map', 'Map', null],
           ['register', 'Register', hotspots.length],
           ['ask', 'Ask', null],
+          ['report', 'Report', null],
           ['about', 'What’s real', null],
         ] as const).map(([key, label, count]) => (
           <button
@@ -203,6 +229,7 @@ export default function App() {
         )}
         {tab === 'register' && <RegisterPanel hotspots={hotspots} riskAt={riskAt} />}
         {tab === 'ask' && <AskPanel snapshot={snapshot} />}
+        {tab === 'report' && <ReportPanel />}
         {tab === 'about' && (
           <AboutPanel hotspots={hotspots} forecast={forecast} aqiBasis={aqi?.basis ?? null} />
         )}
