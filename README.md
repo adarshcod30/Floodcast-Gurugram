@@ -231,7 +231,17 @@ so. To let reports be shared:
 1. Create a free project at [supabase.com](https://supabase.com)
 2. Run [`supabase/schema.sql`](supabase/schema.sql) in its SQL editor. This creates the table, the storage bucket, and the row level security policies that do the actual enforcing
 3. Put the project URL and anon key in `frontend/.env.local` (see [`.env.example`](frontend/.env.example)), and in your Vercel project's environment variables for production
-4. Create a moderator account under Authentication, then review submissions at `/#moderate`
+4. Create a moderator account under Authentication → Users, then **add it to the allowlist**, which is what actually grants the permission:
+   ```sql
+   insert into public.moderators (user_id, email)
+   select id, email from auth.users where email = 'you@example.com';
+   ```
+5. Review submissions at `/#moderate`
+
+Step 4 is two steps deliberately. Supabase allows public email signup by
+default, so "signed in" only means "owns an email address". Moderation is
+gated on that allowlist table rather than on merely holding an account, so it
+holds even if signup stays open or an OAuth provider is added later.
 
 The anon key is public by design and safe in the bundle. An anonymous
 visitor can only ever insert a `pending` report and only ever read `approved`

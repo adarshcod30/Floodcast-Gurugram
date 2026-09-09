@@ -72,21 +72,81 @@ create policy "anon reads approved recent reports"
   to anon
   using (status = 'approved' and created_at > now() - interval '12 hours');
 
+-- ---------------------------------------------------------------------------
+-- Who counts as a moderator
+-- ---------------------------------------------------------------------------
+--
+-- Being signed in is NOT enough, and this is the important part.
+--
+-- Supabase allows public email signup by default (disable_signup = false),
+-- so the `authenticated` role means "anyone who owns an email address", not
+-- "someone trusted". An earlier version of this file granted moderation to
+-- `authenticated` outright, which meant a stranger could sign up, confirm,
+-- read every pending report and approve whatever they liked.
+--
+-- Membership is checked in the database instead, so it still holds if public
+-- signup is re-enabled later or an OAuth provider is switched on.
+
+create table if not exists public.moderators (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  email      text,
+  added_at   timestamptz not null default now()
+);
+
+alter table public.moderators enable row level security;
+
+-- Deliberately no policies: the table is invisible and unwritable through
+-- the API for anon and authenticated alike. Membership is granted from the
+-- dashboard or a migration, never self-service.
+revoke all on public.moderators from anon, authenticated;
+
+create or replace function public.is_moderator()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from public.moderators m where m.user_id = auth.uid());
+$$;
+
+-- Postgres grants EXECUTE to PUBLIC by default, which would expose this at
+-- /rest/v1/rpc/is_moderator to anonymous callers. It leaks nothing (auth.uid()
+-- is null for anon, so it answers false), but a SECURITY DEFINER function
+-- that reads the allowlist should not be reachable by callers who never
+-- evaluate a policy using it.
+revoke execute on function public.is_moderator() from public;
+revoke execute on function public.is_moderator() from anon;
+grant  execute on function public.is_moderator() to authenticated;
+
+-- TWO SUPABASE ADVISORIES REMAIN AFTER THIS FILE, AND BOTH ARE INTENDED.
+--
+-- "RLS enabled, no policy" on public.moderators: that is the point. RLS on
+-- with zero policies denies everything, and the REVOKE above removes the
+-- privilege as well. It is the most locked-down state available, not an
+-- oversight to be fixed by adding a policy.
+--
+-- "Signed-in users can execute SECURITY DEFINER function" for
+-- is_moderator(): required. The reports policies call it, and RLS evaluates
+-- policy functions with the caller's own privileges, so `authenticated`
+-- must hold EXECUTE. A signed-in user who calls it directly learns only
+-- whether they themselves are a moderator, which they already know.
+
 -- Moderators see everything, including what is waiting and what was
--- rejected.
+-- rejected. Nobody else does.
 drop policy if exists "moderators read all" on public.reports;
 create policy "moderators read all"
   on public.reports for select
   to authenticated
-  using (true);
+  using (public.is_moderator());
 
--- Only a signed-in moderator can change a report's status.
+-- Only an allowlisted moderator can change a report's status.
 drop policy if exists "moderators review" on public.reports;
 create policy "moderators review"
   on public.reports for update
   to authenticated
-  using (true)
-  with check (status in ('approved','rejected'));
+  using (public.is_moderator())
+  with check (public.is_moderator() and status in ('approved','rejected'));
 
 -- Nobody deletes through the API. Removal is a dashboard operation, so a
 -- compromised key cannot erase the record of what was reported.
