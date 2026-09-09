@@ -48,6 +48,17 @@ export interface HotspotRow {
   time_to_flood_after_threshold_min: number;
   typical_drain_time_hr: number;
   drainage_capacity_score: number;
+
+  // Measured facts from GMDA's published drainage network, present only if
+  // data/fetch_gmda_drainage.py has been run. These are EVIDENCE, not
+  // inputs: nothing here feeds the scoring above, because turning a
+  // catchment area into a rainfall threshold needs calibration this project
+  // does not have. See data/fetch_gmda_drainage.py.
+  gmda_drain_area_sq_km?: number | null;
+  gmda_nearest_stream_m?: number | null;
+  gmda_flow_accumulation?: number | null;
+  gmda_elevation_m?: number | null;
+  gmda_watershed_id?: string | null;
 }
 
 /** One hour of forecast. Open-Meteo reports precipitation per hour, so the

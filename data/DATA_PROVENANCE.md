@@ -265,3 +265,46 @@ python3 data/export_to_frontend.py
 CI runs exactly this chain on every push and fails if the result differs
 from what is committed, so the register the app ships can always be traced
 back to the sourcing recorded here.
+
+
+---
+
+## 11. GMDA drainage network (measured, and deliberately unused)
+
+Added 2026-09-10 from GMDA OneMap's public ArcGIS REST endpoint:
+
+    https://onemapdepts.gmda.gov.in/server/rest/services/flood_survey_2/FeatureServer
+
+Layer 6 `Natural_Flow_Direction` (4,701 stream segments) and layer 1
+`Watershed_Gurugram` (10 catchments). Fetched by
+`data/fetch_gmda_drainage.py`, joined to the register in
+`data/gmda_drainage_join.csv`, and merged into the shipped JSON by
+`export_to_frontend.py`.
+
+Columns added, all measured rather than estimated:
+
+| Column | Meaning |
+|---|---|
+| `gmda_drain_area_sq_km` | Catchment draining through the nearest mapped channel |
+| `gmda_nearest_stream_m` | Distance to that channel, so a weak match is visible as one |
+| `gmda_flow_accumulation` | Flow accumulation on that segment |
+| `gmda_elevation_m` | Segment elevation, zero on some GMDA rows |
+| `gmda_watershed_id` | Which of the 10 catchments the point sits in |
+
+73 of 73 matched; 55 within 250 m, which is where the match is trustworthy.
+
+**These do not feed the risk score, and a test fails if they ever do.**
+Converting a catchment area into a rainfall threshold needs to know how much
+rain that catchment absorbs before the road floods, which is precisely the
+calibration this project lacks. Publishing them as evidence is honest;
+folding them into a number would manufacture false precision.
+
+Median catchment by severity tier came out flat (0.653 / 0.663 / 0.698 sq km
+for hypercritical / moderate / minor), so this data does not corroborate the
+tier assignments. See `docs/GMDA_DATA.md` for the full discussion.
+
+**Licence.** The endpoint is publicly readable without authentication and no
+licence is published on it. Indian government data of this kind is generally
+reusable with attribution under NDSAP / GODL-India, and it is attributed
+here, but that is an inference rather than a grant. GMDA has not reviewed or
+endorsed this project.

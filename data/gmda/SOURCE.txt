@@ -1,0 +1,8 @@
+GMDA OneMap, ArcGIS REST FeatureServer 'flood_survey_2'
+https://onemapdepts.gmda.gov.in/server/rest/services/flood_survey_2/FeatureServer
+Layer 6 Natural_Flow_Direction: 4701 features
+Layer 1 Watershed_Gurugram: 10 features
+Retrieved: 2026-09-10
+Publicly readable without authentication. No explicit licence is
+published on the endpoint. Attributed to GMDA; GMDA has not reviewed
+or endorsed this project.

@@ -46,11 +46,49 @@ FLOAT_FIELDS = {
 }
 
 
+#: GMDA-sourced columns, merged in when data/gmda_drainage_join.csv exists.
+#: These are evidence, not inputs: nothing here feeds the risk score. See
+#: fetch_gmda_drainage.py for why.
+GMDA_FLOAT_FIELDS = {
+    "gmda_nearest_stream_m",
+    "gmda_drain_area_sq_km",
+    "gmda_flow_accumulation",
+    "gmda_elevation_m",
+}
+
+
+def read_gmda_join() -> dict[str, dict]:
+    """Per-hotspot drainage facts from GMDA, keyed by hotspot_id.
+
+    Optional. A clone that has not run the fetch script still builds; the
+    columns are simply absent and the UI omits that section.
+    """
+    path = DATA_DIR / "gmda_drainage_join.csv"
+    if not path.exists():
+        return {}
+
+    out: dict[str, dict] = {}
+    with path.open(newline="", encoding="utf-8") as fh:
+        for raw in csv.DictReader(fh):
+            row = {}
+            for k, v in raw.items():
+                if k in ("hotspot_id", "name"):
+                    continue
+                if k in GMDA_FLOAT_FIELDS:
+                    row[k] = float(v) if v not in ("", None) else None
+                else:
+                    row[k] = v or None
+            out[raw["hotspot_id"]] = row
+    return out
+
+
 def read_hotspots() -> list[dict]:
+    gmda = read_gmda_join()
     rows: list[dict] = []
     with (DATA_DIR / "hotspots_extended.csv").open(newline="", encoding="utf-8") as fh:
         for raw in csv.DictReader(fh):
             row = {k: (float(v) if k in FLOAT_FIELDS else v) for k, v in raw.items()}
+            row.update(gmda.get(raw["hotspot_id"], {}))
             rows.append(row)
     return rows
 

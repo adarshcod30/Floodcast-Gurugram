@@ -43,6 +43,14 @@ export interface Hotspot {
   intensity_ratio: number;
   forecast_intensity_mm_hr: number;
   threshold_mm_hr: number;
+
+  /** Measured drainage facts from GMDA's published network. Evidence only:
+   *  deliberately not an input to any score. */
+  gmda_drain_area_sq_km?: number | null;
+  gmda_nearest_stream_m?: number | null;
+  gmda_flow_accumulation?: number | null;
+  gmda_elevation_m?: number | null;
+  gmda_watershed_id?: string | null;
 }
 
 export interface HotspotsResponse {

@@ -82,6 +82,53 @@ curl "$BASE/6/query?where=1%3D1&outFields=*&f=geojson&outSR=4326\
 
 `f=geojson` works, so it drops straight into any GIS or into Leaflet.
 
+### What happened when it was actually joined to the register
+
+[`data/fetch_gmda_drainage.py`](../data/fetch_gmda_drainage.py) pulls all
+4,701 segments and the 10 watersheds, then attaches to each of the 73
+hotspots the nearest stream segment and its catchment. Results:
+
+- 73 of 73 hotspots matched a segment
+- 55 of 73 sit within 250 m of one, which is where the match is trustworthy
+- Catchments range from 0.149 to 9.5 sq km, median 0.621
+
+**Then the interesting part, which does not flatter this project.** Median
+catchment by the register's own severity tier, restricted to hotspots within
+250 m of a mapped channel:
+
+| Tier | n | Median catchment | Max |
+|---|---:|---:|---:|
+| hypercritical | 10 | 0.653 sq km | 9.500 |
+| moderate | 24 | 0.663 sq km | 7.422 |
+| minor | 21 | 0.698 sq km | 3.779 |
+
+That is flat, and very slightly inverted. **GMDA's independent hydrology
+shows no relationship with the severity tiers this register assigns**, and
+those tiers drive every threshold behind every verdict.
+
+Two readings, both plausible:
+
+1. Urban waterlogging in Gurugram is driven by drain capacity, blockage and
+   road geometry rather than by natural catchment size, which is what
+   local reporting consistently describes. Catchment would then be the wrong
+   predictor, and the tiers can still be right.
+2. The tiers, which come from how severely news sources describe a place,
+   are not measuring a physical property at all.
+
+There is currently no way to tell which, because that requires the
+rainfall-versus-flood pairs described below. What can be said is that the
+one hotspot with a genuinely exceptional catchment, **Hero Honda Chowk at
+9.5 sq km**, nearly double the next, is also the point that reliably makes
+national news when it floods. A single agreement is not a correlation, but
+it is not nothing either.
+
+This is exactly why the catchment figures are shown in the app as evidence
+and are **not** wired into the risk score. Mapping a catchment area onto a
+rainfall threshold requires knowing how much rain that catchment takes
+before the road goes under. Inventing that mapping would produce numbers
+that look measured and are not, and a test in the suite fails if the
+scoring ever starts reading these fields.
+
 ### The layer that looks perfect and is not
 
 `Flood_survey_v2` (layer 0) has exactly the schema this project would want:

@@ -59,6 +59,26 @@ None of the official counts agree with each other. MCG's 155, GMDA's own 6-point
 
 **Do not quote "73 hotspots" as though it carries the weight of "36 hotspots", or as a claim to match MCG's 155.** Expanding the register diluted average confidence relative to the original 36 (72% sourced), even though this round's nine additions are all sourced. That trade-off is documented rather than hidden.
 
+### One measured thing, and what it showed
+
+Every hotspot now carries the catchment area that drains through it, taken
+from GMDA's own published drainage network (4,701 mapped stream segments).
+That is the first non-estimated physical fact in the register, and it is
+shown in each map popup.
+
+It is **not** used in any risk score, and a test enforces that. It also
+produced an uncomfortable result worth stating up front: median catchment by
+severity tier comes out at 0.653, 0.663 and 0.698 sq km for hypercritical,
+moderate and minor. Flat, and slightly backwards. GMDA's hydrology shows no
+relationship with the tiers this register assigns.
+
+That may mean Gurugram floods from blocked drains rather than big
+catchments, which is what local reporting describes, or it may mean the
+tiers do not measure a physical property. Distinguishing those needs the
+calibration data described in [`docs/GMDA_DATA.md`](docs/GMDA_DATA.md). The
+one point with an exceptional catchment, Hero Honda Chowk at 9.5 sq km, is
+also the one that reliably makes national news.
+
 ### The risk model is calibrated, not measured
 
 Four columns drive every risk score: `rainfall_threshold_mm_per_hr`, `time_to_flood_after_threshold_min`, `typical_drain_time_hr`, and `drainage_capacity_score`. **All four are engineering estimates**, set by severity tier, with no historical rainfall-versus-flood record behind them.

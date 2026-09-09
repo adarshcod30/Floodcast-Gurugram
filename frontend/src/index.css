@@ -963,3 +963,12 @@ select.field { cursor: pointer; }
   overflow-y: auto;
 }
 .mod .rail-stat { cursor: pointer; }
+
+/* Measured GMDA figures, visually separated from the computed risk numbers
+   above them so a sourced fact never reads as a model output. */
+.pop-gmda {
+  border-top: 1px solid var(--line-soft);
+  margin-top: 4px;
+  padding-top: 5px;
+}
+.pop-gmda .num { color: #7FB7CE; }

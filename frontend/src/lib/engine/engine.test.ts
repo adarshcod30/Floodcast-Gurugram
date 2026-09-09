@@ -98,6 +98,50 @@ describe('hotspot register', () => {
 });
 
 // ---------------------------------------------------------------------------
+// GMDA drainage data
+// ---------------------------------------------------------------------------
+
+describe('GMDA drainage evidence', () => {
+  it('is present on every hotspot', () => {
+    for (const h of rows) {
+      expect(h.gmda_drain_area_sq_km, h.name).toBeTypeOf('number');
+      expect(h.gmda_nearest_stream_m, h.name).toBeTypeOf('number');
+    }
+  });
+
+  it('carries the distance to the channel it was matched against', () => {
+    // Without this, a catchment matched 800 m away would read exactly like
+    // one matched at the kerb. The join is only as good as its distance.
+    for (const h of rows) {
+      expect(h.gmda_nearest_stream_m!, h.name).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('never changes a risk score', () => {
+    // The load-bearing test. This data is published as evidence, and turning
+    // a catchment area into a rainfall threshold needs calibration nobody
+    // has yet. If it ever starts moving the number, that is a silent claim
+    // to precision the project cannot support, and this fails.
+    const spot = find('IFFCO Chowk');
+    const rain = spot.rainfall_threshold_mm_per_hr * 2;
+    const baseline = computeHotspotRisk(spot, rain, 4, new Date(Date.UTC(2026, 7, 9, 12)));
+
+    const doctored = {
+      ...spot,
+      gmda_drain_area_sq_km: 9999,
+      gmda_nearest_stream_m: 0,
+      gmda_flow_accumulation: 999999,
+      gmda_elevation_m: -50,
+    };
+    const after = computeHotspotRisk(doctored, rain, 4, new Date(Date.UTC(2026, 7, 9, 12)));
+
+    expect(after.risk_score).toBe(baseline.risk_score);
+    expect(after.risk_level).toBe(baseline.risk_level);
+    expect(after.time_window).toEqual(baseline.time_window);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Risk scoring
 // ---------------------------------------------------------------------------
 

@@ -204,10 +204,31 @@ export default function MapPanel({
                   </div>
                 )}
 
+                {/* Measured, unlike everything above it. Labelled as GMDA's
+                    figure and kept visually separate from the risk numbers,
+                    which are computed from estimates. */}
+                {h.gmda_drain_area_sq_km != null && (
+                  <div className="pop-kv pop-gmda">
+                    <span>Catchment draining here</span>
+                    <span className="num">
+                      {h.gmda_drain_area_sq_km} km²
+                      {h.gmda_nearest_stream_m != null &&
+                        ` · ${Math.round(h.gmda_nearest_stream_m)} m to channel`}
+                    </span>
+                  </div>
+                )}
+
                 <div className="pop-note">
                   <strong>{conf.short}.</strong> {conf.blurb}
                   {h.coordinates_verified === 'No' && (
                     <> Coordinates are approximate and unverified.</>
+                  )}
+                  {h.gmda_drain_area_sq_km != null && (
+                    <>
+                      {' '}The catchment figure is measured, from GMDA's published
+                      drainage network. It is shown as evidence and is not used in
+                      the risk score.
+                    </>
                   )}
                 </div>
               </Popup>

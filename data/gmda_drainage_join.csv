@@ -1,0 +1,74 @@
+hotspot_id,name,gmda_nearest_stream_m,gmda_stream_id,gmda_drain_area_sq_km,gmda_flow_accumulation,gmda_elevation_m,gmda_watershed_id
+FCG-001,Subhash Chowk,28.4,932,0.2425,166,226,10
+FCG-002,Basai Chowk,239.1,804,4.319,2957,0,8
+FCG-003,Khandsa Road,115.3,957,0.3988,273,0,8
+FCG-004,Sector 10A,324.8,536,0.3155,216,0,8
+FCG-005,Gandhi Nagar Booster,170.1,721,1.916,1312,0,8
+FCG-006,Begumpur Khatola,96.0,1476,0.149,102,214,1
+FCG-007,Fazilpur,319.4,1805,0.3038,208,216,1
+FCG-008,Pataudi Road,148.4,1030,0.1811,124,0,8
+FCG-009,AIT Chowk,17.0,577,0.773,529,0,8
+FCG-010,Sector 4 Market Road,59.0,394,0.447,306,0,10
+FCG-011,Old Railway Road,344.6,759,0.3506,240,0,10
+FCG-012,Palam Vihar Extension,140.6,77,0.3958,271,211,8
+FCG-013,Rajendra Park,9.8,384,2.511,1719,0,8
+FCG-014,IFFCO Chowk,260.2,862,0.3403,233,0,10
+FCG-015,Rajiv Chowk,34.0,1196,0.605,414,0,10
+FCG-016,Signature Tower Flyover,227.9,1084,0.701,480,0,10
+FCG-017,Narsinghpur,342.8,2959,0.568,389,0,9
+FCG-018,Hero Honda Chowk,25.4,3801,9.5,6504,0,1
+FCG-019,Sohna Road,255.5,1997,0.2425,166,0,9
+FCG-020,Golf Course Extension Road,25.7,2509,7.422,5081,225,9
+FCG-021,Artemis Roundabout / NH-8,94.2,1495,1.797,1230,232,10
+FCG-022,Southern Peripheral Road (SPR),35.2,2381,0.4397,301,0,9
+FCG-023,Wazirabad,375.0,2638,8.748,5989,0,9
+FCG-024,Millennium Metro Station Area,131.2,862,0.3403,233,0,10
+FCG-025,Sector 15,19.0,671,0.3549,243,0,10
+FCG-026,Mayfield Garden,125.8,2009,2.264,1550,0,9
+FCG-027,Atlas Chowk,117.2,467,0.184,126,207,8
+FCG-028,CRPF Chowk,104.1,315,0.64,438,0,10
+FCG-029,Cyber City,252.0,227,0.1957,134,238,10
+FCG-030,Udyog Vihar,202.1,98,0.2804,192,0,10
+FCG-031,Sector 56 Main Stretch,240.9,1695,0.698,478,0,10
+FCG-032,Leisure Valley / Sector 29,231.4,631,3.462,2370,0,10
+FCG-033,DLF Phase 2 Internal Road,164.1,356,2.026,1387,0,10
+FCG-034,South City Internal Road,152.3,1127,2.98,2040,0,10
+FCG-035,Sector 49 Internal Road,382.3,2214,0.2176,149,0,9
+FCG-036,Sector 67 Residential Road,143.8,2666,0.2629,180,0,9
+FCG-037,Golf Course Road,223.4,1407,0.3695,253,0,10
+FCG-038,Judges Enclave (Golf Course Road),96.1,1407,0.3695,253,0,10
+FCG-039,Dwarka Expressway (Sectors 112-115),239.7,19,0.945,647,0,10
+FCG-040,Old Delhi-Gurgaon Road (Mahavir Chowk-Kapashera),248.8,101,1.445,989,0,10
+FCG-041,Sushant Lok 1,154.9,673,0.4046,277,0,10
+FCG-042,Malibu Town (Sohna Road),260.7,2108,0.621,425,0,9
+FCG-043,Vatika City (Sohna Road),194.8,2389,0.685,469,0,9
+FCG-044,Nirvana Country (Sohna Road),51.2,1872,0.663,454,0,9
+FCG-045,DLF Phase 1 Internal Road,150.6,472,0.2469,169,238,10
+FCG-046,DLF Phase 4 (Galleria Market),26.9,614,0.817,559,0,10
+FCG-047,Palam Vihar Main Market,284.5,131,2.566,1757,0,8
+FCG-048,South City 1 Internal Road,48.0,1116,3.779,2587,224,10
+FCG-049,Sector 14 Market,130.3,612,0.895,613,224,10
+FCG-050,Sector 17 Market,331.9,604,0.757,518,0,10
+FCG-051,Sector 22 (near HUDA),150.0,683,0.502,344,0,10
+FCG-052,Sector 23A Industrial Area,192.2,274,0.4937,338,0,10
+FCG-053,Sector 31 Market,29.8,1082,1.744,1194,223,10
+FCG-054,Sector 40 (near Golf Course Rd),114.2,1214,0.777,532,0,10
+FCG-055,Sector 45,79.6,1530,0.656,449,235,10
+FCG-056,Sector 46 (Sohna Road belt),311.7,1682,0.574,393,0,9
+FCG-057,Sector 57 (near Golf Course Ext Rd),133.6,1973,0.594,407,0,9
+FCG-058,Sector 82 (Dwarka Expressway belt),217.5,131,2.566,1757,0,8
+FCG-059,Sector 109 (Dwarka Expressway belt),64.0,69,1.049,718,0,10
+FCG-060,Manesar Chowk,373.8,3962,0.3403,233,0,1
+FCG-061,Kherki Daula Toll Plaza,275.5,2769,0.97,664,0,1
+FCG-062,Sector 105 (Dwarka Expressway belt),21.9,77,0.3958,271,211,8
+FCG-063,IMT Manesar Main Road,306.0,3389,0.4528,310,0,1
+FCG-064,Sector 56 Extension,170.1,1695,0.698,478,0,10
+FCG-065,Sheetla Mata Road,81.1,1779,0.2629,180,0,9
+FCG-066,Jwala Mill Road,331.4,984,3.104,2125,0,8
+FCG-067,Sector 28 (near Chakkarpur),151.4,488,1.214,831,0,10
+FCG-068,Laxman Vihar,33.0,469,0.3097,212,0,8
+FCG-069,Krishna Chowk,126.7,408,1.12,767,0,8
+FCG-070,Dundahera,182.7,179,2.679,1834,0,10
+FCG-071,Surat Nagar,1.8,912,1.962,1343,0,8
+FCG-072,Bajghera,252.5,1202,0.612,419,0,1
+FCG-073,Dhanwapur Road (old city bus stand area),195.9,562,0.533,365,0,10

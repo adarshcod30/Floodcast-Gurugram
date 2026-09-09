@@ -85,6 +85,13 @@ function toHotspot(row: HotspotRow, risk: Risk | undefined): Hotspot {
     intensity_ratio: risk?.intensity_ratio ?? 0,
     forecast_intensity_mm_hr: risk?.forecast_intensity_mm_hr ?? 0,
     threshold_mm_hr: risk?.threshold_mm_hr ?? row.rainfall_threshold_mm_per_hr,
+
+    // Passed straight through to the UI. Never read by the scoring above.
+    gmda_drain_area_sq_km: row.gmda_drain_area_sq_km ?? null,
+    gmda_nearest_stream_m: row.gmda_nearest_stream_m ?? null,
+    gmda_flow_accumulation: row.gmda_flow_accumulation ?? null,
+    gmda_elevation_m: row.gmda_elevation_m ?? null,
+    gmda_watershed_id: row.gmda_watershed_id ?? null,
   };
 }
 
