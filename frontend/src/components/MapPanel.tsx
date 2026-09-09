@@ -28,6 +28,26 @@ import { BAND, BAND_HEX, CONFIDENCE, clock, isSourced } from '../lib/display';
 
 const GURUGRAM: [number, number] = [28.4595, 77.0266];
 
+/**
+ * How far out the map may be pulled.
+ *
+ * Everything this tool knows about is inside Gurugram. Zooming out to
+ * Uttar Pradesh, or to the whole subcontinent, shows 73 markers collapsing
+ * into one green smudge and answers no question anyone came here with. The
+ * bounds cover Delhi NCR, which is far enough to see where Gurugram sits in
+ * relation to Delhi and Faridabad and no further.
+ *
+ * `maxBoundsViscosity: 1` makes the edge solid rather than elastic; at
+ * anything less the map rubber-bands past the limit and springs back, which
+ * reads as jank rather than as a boundary.
+ */
+const NCR_BOUNDS: [[number, number], [number, number]] = [
+  [27.85, 76.40],
+  [29.05, 77.85],
+];
+const MIN_ZOOM = 10;
+const MAX_ZOOM = 18;
+
 interface Props {
   hotspots: Hotspot[];
   attractions: Attraction[];
@@ -144,6 +164,10 @@ export default function MapPanel({
       <MapContainer
         center={GURUGRAM}
         zoom={12}
+        minZoom={MIN_ZOOM}
+        maxZoom={MAX_ZOOM}
+        maxBounds={NCR_BOUNDS}
+        maxBoundsViscosity={1}
         scrollWheelZoom
         zoomControl
         preferCanvas
@@ -154,7 +178,8 @@ export default function MapPanel({
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          maxZoom={19}
+          minZoom={MIN_ZOOM}
+          maxZoom={MAX_ZOOM}
         />
 
         {visible.map((h) => {

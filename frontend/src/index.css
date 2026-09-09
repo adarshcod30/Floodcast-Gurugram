@@ -51,6 +51,7 @@
   --r-lg: 11px;
 
   --rail-h: 44px;
+  --nav-w:  232px;
 
   color-scheme: dark;
 }
@@ -109,24 +110,106 @@ button { cursor: pointer; }
    Shell
    ═══════════════════════════════════════════════════════════════════ */
 
+/* ── Shell ────────────────────────────────────────────────────────
+   A left rail and one content pane, rather than a vertical stack of
+   bands. The stack was the problem: verdict, timeline, simulator and
+   tabs each took a slice off the top, and the map, which is the thing
+   people came to look at, was left with under half the window on a
+   desktop. Everything that is context now lives in the rail, and the
+   selected view gets the entire pane.
+
+   On a phone the rail becomes a bottom bar, because that is where a
+   thumb reaches and because a 240px sidebar on a 375px screen is
+   absurd. */
 .app {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: var(--nav-w) 1fr;
   height: 100%;
   min-height: 0;
 }
 
-/* ── Status rail ─────────────────────────────────────────────────── */
+.nav {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line-soft);
+  background: var(--base);
+}
 
-.rail {
-  height: var(--rail-h);
-  flex: none;
+.nav-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 15px 16px 13px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.nav-brand span { color: var(--ink-faint); font-weight: 500; font-size: 13px; }
+
+.nav-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 8px;
+}
+
+.nav-item {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--line-soft);
-  background: var(--base);
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: var(--r);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-faint);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.nav-item:hover { color: var(--ink-dim); background: var(--raised); }
+.nav-item[aria-current='page'] {
+  color: var(--ink);
+  background: var(--raised-2);
+}
+.nav-item svg { flex: none; opacity: 0.85; }
+.nav-count {
+  margin-left: auto;
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--raised-2);
+  color: var(--ink-faint);
+}
+.nav-item[aria-current='page'] .nav-count { background: var(--line); color: var(--ink-dim); }
+
+.nav-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 10px;
+}
+
+.nav-foot {
+  flex: none;
+  border-top: 1px solid var(--line-soft);
+  padding: 9px 14px;
+}
+
+/* ── Main pane ───────────────────────────────────────────────────── */
+
+.main {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
 .rail-mark {
@@ -351,45 +434,34 @@ button { cursor: pointer; }
    Views
    ═══════════════════════════════════════════════════════════════════ */
 
-.tabs {
-  flex: none;
-  display: flex;
-  gap: 2px;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--line-soft);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.tabs::-webkit-scrollbar { display: none; }
-
-.tab {
-  padding: 10px 13px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink-faint);
-  border-bottom: 2px solid transparent;
-  white-space: nowrap;
-  transition: color 0.12s ease;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.tab:hover { color: var(--ink-dim); }
-.tab[aria-selected='true'] { color: var(--ink); border-bottom-color: var(--ink); }
-
-.tab-count {
-  font-size: 10.5px;
-  padding: 1px 5px;
-  border-radius: 99px;
-  background: var(--raised-2);
-  color: var(--ink-dim);
-}
-
+/* The selected view owns the whole pane. Nothing is stacked above it
+   except the hour strip, which is 54px and is the one control that has
+   to sit next to the thing it changes. */
 .view {
   flex: 1;
   min-height: 0;
   position: relative;
   overflow: hidden;
+}
+
+/* ── The view's own header, for the non-map panels ─────────────────── */
+.view-head {
+  flex: none;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.view-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.view-sub {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-dim);
+  max-width: 68ch;
 }
 
 .scroll {
@@ -972,3 +1044,199 @@ select.field { cursor: pointer; }
   padding-top: 5px;
 }
 .pop-gmda .num { color: #7FB7CE; }
+
+/* ── Compact verdict banner ───────────────────────────────────────
+   The verdict used to occupy about 130px of a fixed vertical stack. It
+   is still the first thing read and still the only large area of colour,
+   but it now states the answer in one line with the three figures
+   alongside, instead of a paragraph and a metrics block. The detail it
+   used to spell out is one click away in the view below it. */
+.vb {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 20px;
+  border-bottom: 1px solid var(--line-soft);
+  border-left: 3px solid var(--band, var(--imd-green));
+  background: var(--base);
+}
+.vb-main { flex: 1; min-width: 0; }
+.vb-when {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--band, var(--imd-green));
+}
+.vb-line {
+  font-size: 16.5px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  line-height: 1.25;
+  margin-top: 1px;
+}
+.vb-detail {
+  font-size: 12px;
+  color: var(--ink-dim);
+  line-height: 1.45;
+  margin-top: 2px;
+}
+.vb-detail strong { color: var(--ink); font-weight: 600; }
+
+.vb-metrics {
+  flex: none;
+  display: flex;
+  gap: 20px;
+  align-items: baseline;
+}
+.vb-metric { text-align: right; }
+.vb-v {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+.vb-u { font-size: 10.5px; color: var(--ink-faint); margin-left: 2px; }
+.vb-k {
+  display: block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-top: 1px;
+}
+
+/* ── Live status, in the rail foot ────────────────────────────────── */
+.nav-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  font: inherit;
+  font-size: 11px;
+  color: var(--ink-faint);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+.nav-status:hover { color: var(--ink-dim); }
+.nav-status:disabled { cursor: default; }
+
+/* ── Phone: the rail becomes a bottom bar ─────────────────────────── */
+@media (max-width: 860px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+  .main { grid-column: 1; grid-row: 1; }
+
+  .nav {
+    grid-column: 1;
+    grid-row: 2;
+    flex-direction: row;
+    border-right: none;
+    border-top: 1px solid var(--line);
+    /* Clear of the iOS home indicator. */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  /* Brand and live status move into the banner on a phone; repeating
+     them in a five-item thumb bar would cost a tab's worth of width. */
+  .nav-brand, .nav-foot, .nav-aside { display: none; }
+  .nav-scroll { overflow: visible; padding: 0; display: flex; width: 100%; }
+  .nav-items {
+    flex-direction: row;
+    width: 100%;
+    padding: 0;
+    gap: 0;
+  }
+  .nav-item {
+    flex: 1;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 2px;
+    border-radius: 0;
+    font-size: 10.5px;
+    text-align: center;
+    justify-content: center;
+  }
+  .nav-item[aria-current='page'] {
+    background: none;
+    box-shadow: inset 0 2px 0 var(--ink);
+  }
+  .nav-count { margin-left: 0; }
+
+  .vb { padding: 9px 14px; gap: 10px; flex-wrap: wrap; }
+  .vb-line { font-size: 15px; }
+  .vb-detail { display: none; }
+  .vb-metrics { gap: 14px; }
+  .vb-v { font-size: 16px; }
+}
+
+@media (max-width: 420px) {
+  /* Below this the three figures crowd the headline out of one line. */
+  .vb-metrics { width: 100%; justify-content: flex-start; }
+}
+
+/* ── Location picker ───────────────────────────────────────────────
+   The container needs a real height. MapContainer carries an inline
+   height:100%, which beats any stylesheet rule, and 100% of a parent with
+   no height of its own resolves to zero: the map mounts, Leaflet reports a
+   0px viewport, and nothing renders at all. */
+.picker {
+  height: 268px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.picker > .leaflet-container {
+  flex: 1;
+  min-height: 0;
+  background: var(--raised);
+}
+.picker-hint {
+  flex: none;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  border-top: 1px solid var(--line-soft);
+  background: var(--raised);
+}
+.rep-relocate {
+  margin-left: auto;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.rep-relocate:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+/* On a phone, twelve equal columns leave 28px each and the hour labels
+   collide into an unreadable smear. Fixed-width columns that scroll keep
+   every hour reachable and legible, which matters because the hour
+   scrubber is this interface's primary control, not a decoration. */
+@media (max-width: 860px) {
+  .gauge { padding: 11px 14px 13px; }
+  .gauge-track {
+    overflow-x: auto;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+    padding-bottom: 2px;
+  }
+  .gauge-track::-webkit-scrollbar { display: none; }
+  .gauge-col {
+    flex: 0 0 46px;
+    scroll-snap-align: start;
+  }
+}

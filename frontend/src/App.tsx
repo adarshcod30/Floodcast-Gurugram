@@ -20,6 +20,7 @@ import AskPanel from './components/AskPanel';
 import MapPanel from './components/MapPanel';
 import RainTimeline from './components/RainTimeline';
 import ModeratePanel from './components/ModeratePanel';
+import NavIcon, { type IconName } from './components/NavIcon';
 import RegisterPanel from './components/RegisterPanel';
 import ReportPanel from './components/ReportPanel';
 import Simulate from './components/Simulate';
@@ -32,6 +33,14 @@ import type { AqiResult } from './lib/engine/aqi';
 import type { Hotspot, RiskLevel, TimeWindow } from './types';
 
 type Tab = 'map' | 'register' | 'ask' | 'report' | 'about';
+
+const NAV: { key: Tab; label: string; icon: IconName }[] = [
+  { key: 'map', label: 'Map', icon: 'map' },
+  { key: 'register', label: 'Register', icon: 'register' },
+  { key: 'ask', label: 'Ask', icon: 'ask' },
+  { key: 'report', label: 'Report', icon: 'report' },
+  { key: 'about', label: 'What’s real', icon: 'about' },
+];
 
 /** Open-Meteo publishes hourly, so polling faster only moves bytes. */
 const REFRESH_MS = 10 * 60 * 1000;
@@ -158,82 +167,91 @@ export default function App() {
     );
   }
 
+  // The hour scrubber and the simulator only mean something for the views
+  // that are scored by hour. Showing them above Ask, Report or What's real
+  // would take 100px off those pages to control nothing on them.
+  const hourly = tab === 'map' || tab === 'register';
+
   return (
     <div className="app">
-      <header className="rail">
-        <div className="rail-mark">
+      <nav className="nav" aria-label="Views">
+        <div className="nav-brand">
           FloodCast <span>Gurugram</span>
         </div>
-        <div className="rail-spacer" />
-        <button
-          className="rail-stat"
-          onClick={() => void load()}
-          disabled={refreshing}
-          title="Refresh the rainfall forecast"
-        >
-          <span className="pulse" data-stale={stale} />
-          {refreshing
-            ? 'refreshing'
-            : !forecast
-              ? 'reading forecast'
-              : forecast.source === 'unavailable'
-                ? 'forecast unavailable'
-                : `${forecast.provider} · ${clock(forecast.fetched_at)}`}
-        </button>
-      </header>
 
-      <Verdict
-        frame={frame}
-        total={hotspots.length}
-        worstName={worstName}
-        worstWindow={worst?.time_window ?? null}
-        aqi={{ value: aqi?.aqi ?? null, category: aqi?.category ?? null }}
-      />
+        <div className="nav-scroll">
+          <div className="nav-items">
+            {NAV.map(({ key, label, icon }) => (
+              <button
+                key={key}
+                className="nav-item"
+                aria-current={tab === key ? 'page' : undefined}
+                onClick={() => setTab(key)}
+              >
+                <NavIcon name={icon} />
+                {label}
+                {key === 'register' && <span className="nav-count num">{hotspots.length}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
 
-      <RainTimeline frames={frames} selected={hour} onSelect={setHour} />
-
-      <Simulate value={simulated} onChange={setSimulated} />
-
-      <nav className="tabs" role="tablist" aria-label="Views">
-        {([
-          ['map', 'Map', null],
-          ['register', 'Register', hotspots.length],
-          ['ask', 'Ask', null],
-          ['report', 'Report', null],
-          ['about', 'What’s real', null],
-        ] as const).map(([key, label, count]) => (
+        <div className="nav-foot">
           <button
-            key={key}
-            role="tab"
-            className="tab"
-            aria-selected={tab === key}
-            onClick={() => setTab(key as Tab)}
+            className="nav-status"
+            onClick={() => void load()}
+            disabled={refreshing}
+            title="Refresh the rainfall forecast"
           >
-            {label}
-            {count !== null && <span className="tab-count num">{count}</span>}
+            <span className="pulse" data-stale={stale} />
+            {refreshing
+              ? 'refreshing…'
+              : !forecast
+                ? 'reading forecast'
+                : forecast.source === 'unavailable'
+                  ? 'forecast unavailable'
+                  : `${forecast.provider} · ${clock(forecast.fetched_at)}`}
           </button>
-        ))}
+        </div>
       </nav>
 
-      <main className="view">
-        {tab === 'map' && (
-          <MapPanel
-            hotspots={hotspots}
-            attractions={ATTRACTIONS}
-            riskAt={riskAt}
-            showLandmarks={showLandmarks}
-            showWatchlist={showWatchlist}
-            onToggleLandmarks={() => setShowLandmarks((v) => !v)}
-            onToggleWatchlist={() => setShowWatchlist((v) => !v)}
-          />
+      <div className="main">
+        <Verdict
+          frame={frame}
+          total={hotspots.length}
+          worstName={worstName}
+          worstWindow={worst?.time_window ?? null}
+          aqi={{ value: aqi?.aqi ?? null, category: aqi?.category ?? null }}
+          simulated={simulated !== null}
+        />
+
+        {hourly && (
+          <>
+            <RainTimeline frames={frames} selected={hour} onSelect={setHour} />
+            <Simulate value={simulated} onChange={setSimulated} />
+          </>
         )}
-        {tab === 'register' && <RegisterPanel hotspots={hotspots} riskAt={riskAt} />}
-        {tab === 'ask' && <AskPanel snapshot={snapshot} />}
-        {tab === 'report' && <ReportPanel />}
-        {tab === 'about' && (
-          <AboutPanel hotspots={hotspots} forecast={forecast} aqiBasis={aqi?.basis ?? null} />
-        )}
-      </main>
+
+        <main className="view">
+          {tab === 'map' && (
+            <MapPanel
+              hotspots={hotspots}
+              attractions={ATTRACTIONS}
+              riskAt={riskAt}
+              showLandmarks={showLandmarks}
+              showWatchlist={showWatchlist}
+              onToggleLandmarks={() => setShowLandmarks((v) => !v)}
+              onToggleWatchlist={() => setShowWatchlist((v) => !v)}
+            />
+          )}
+          {tab === 'register' && <RegisterPanel hotspots={hotspots} riskAt={riskAt} />}
+          {tab === 'ask' && <AskPanel snapshot={snapshot} />}
+          {tab === 'report' && <ReportPanel />}
+          {tab === 'about' && (
+            <AboutPanel hotspots={hotspots} forecast={forecast} aqiBasis={aqi?.basis ?? null} />
+          )}
+        </main>
+      </div>
     </div>
   );
 }

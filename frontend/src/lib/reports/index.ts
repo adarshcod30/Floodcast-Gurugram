@@ -33,50 +33,66 @@ export interface Fix {
   lat: number;
   lon: number;
   accuracy_m: number | null;
+  /** False when the device is somewhere this tool does not cover. */
+  in_area: boolean;
+  /** Where the coordinate came from, which the UI states rather than hides. */
+  source: 'gps' | 'picked';
 }
 
 /** Gurugram, generously bounded. Matches the CHECK constraints in the schema. */
-function inGurugram(lat: number, lon: number): boolean {
+export function inGurugram(lat: number, lon: number): boolean {
   return lat >= 28.3 && lat <= 28.6 && lon >= 76.8 && lon <= 77.25;
+}
+
+/** A coordinate chosen by hand on the map. */
+export function pickedFix(lat: number, lon: number): Fix {
+  return {
+    lat: Number(lat.toFixed(6)),
+    lon: Number(lon.toFixed(6)),
+    accuracy_m: null,
+    in_area: inGurugram(lat, lon),
+    source: 'picked',
+  };
 }
 
 /**
  * Ask the device where it is.
  *
  * High accuracy is requested because the difference between two ends of an
- * underpass matters here, and a 2 km network fix would put a report on the
- * wrong road entirely. The accuracy figure is kept and shown rather than
- * quietly discarded, so a poor fix is visible as a poor fix.
+ * underpass matters, and a 2 km network fix would put a report on the wrong
+ * road entirely. The accuracy figure is kept and shown rather than quietly
+ * discarded, so a poor fix is visible as a poor fix.
+ *
+ * A fix outside Gurugram resolves rather than rejects. Refusing it outright
+ * was wrong twice over: it locked out everyone testing or contributing from
+ * elsewhere, and it assumed you can only report a road you are currently
+ * standing on, when people routinely want to flag one they drove through an
+ * hour ago. Out-of-area is reported to the caller, which offers the map
+ * instead. Geolocation is a shortcut here, never a gate.
  */
 export function currentLocation(): Promise<Fix> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new LocationError('This device cannot report its location.'));
+      reject(new LocationError('This device cannot report its location. Pick the spot on the map instead.'));
       return;
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude, accuracy } = pos.coords;
-        if (!inGurugram(latitude, longitude)) {
-          reject(
-            new LocationError(
-              'That location is outside Gurugram. This tool only covers Gurugram, so the report would not be useful here.',
-            ),
-          );
-          return;
-        }
         resolve({
           lat: Number(latitude.toFixed(6)),
           lon: Number(longitude.toFixed(6)),
           accuracy_m: accuracy ? Math.round(accuracy) : null,
+          in_area: inGurugram(latitude, longitude),
+          source: 'gps',
         });
       },
       (err) => {
         reject(
           new LocationError(
             err.code === err.PERMISSION_DENIED
-              ? 'Location permission was denied. A report without a location cannot be placed on the map.'
-              : 'Could not get a location fix. Try again with a clear view of the sky.',
+              ? 'Location permission was denied. Pick the spot on the map instead.'
+              : 'Could not get a location fix. Pick the spot on the map instead.',
           ),
         );
       },

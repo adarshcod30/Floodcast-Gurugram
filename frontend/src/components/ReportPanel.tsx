@@ -19,9 +19,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   DEPTHS, LocationError, PhotoError, communityReports, currentLocation, fileReport,
-  isConfigured, localReports, photoUrl, preparePhoto, previewUrl, retryFailed,
+  isConfigured, localReports, photoUrl, pickedFix, preparePhoto, previewUrl, retryFailed,
   type Fix, type PreparedPhoto, type QueuedReport, type RemoteReport,
 } from '../lib/reports';
+import LocationPicker from './LocationPicker';
 import { relativeAge } from '../lib/display';
 
 type Stage = 'idle' | 'locating' | 'form' | 'saving';
@@ -29,6 +30,7 @@ type Stage = 'idle' | 'locating' | 'form' | 'saving';
 export default function ReportPanel() {
   const [stage, setStage] = useState<Stage>('idle');
   const [fix, setFix] = useState<Fix | null>(null);
+  const [picking, setPicking] = useState(false);
   const [photo, setPhoto] = useState<PreparedPhoto | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [depth, setDepth] = useState<string>('knee');
@@ -51,16 +53,36 @@ export default function ReportPanel() {
   // An object URL leaks the blob until it is revoked.
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
-  async function start() {
+  /** Try GPS. An out-of-area fix opens the map rather than refusing. */
+  async function startGps() {
     setError(null);
     setStage('locating');
     try {
-      setFix(await currentLocation());
+      const got = await currentLocation();
+      setFix(got);
+      setPicking(!got.in_area);
+      if (!got.in_area) {
+        setError(
+          'You are outside Gurugram, so your own position cannot be the report. ' +
+            'Mark the spot on the map instead.',
+        );
+      }
       setStage('form');
     } catch (err) {
+      // Denied or unavailable is not a dead end: fall through to the map.
       setError(err instanceof LocationError ? err.message : 'Could not get your location.');
-      setStage('idle');
+      setFix(null);
+      setPicking(true);
+      setStage('form');
     }
+  }
+
+  /** Skip GPS entirely and place the pin by hand. */
+  function startPick() {
+    setError(null);
+    setFix(null);
+    setPicking(true);
+    setStage('form');
   }
 
   async function onPhotoChosen(e: React.ChangeEvent<HTMLInputElement>) {
@@ -94,6 +116,8 @@ export default function ReportPanel() {
   function reset() {
     setStage('idle');
     setFix(null);
+    setPicking(false);
+    setError(null);
     setPhoto(null);
     if (preview) URL.revokeObjectURL(preview);
     setPreview(null);
@@ -135,31 +159,64 @@ export default function ReportPanel() {
         )}
 
         {stage === 'idle' && (
-          <button className="btn" onClick={() => void start()}>
-            Report water here
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={() => void startGps()}>
+              Use my location
+            </button>
+            <button className="btn btn-ghost" onClick={startPick}>
+              Pick on map
+            </button>
+          </div>
         )}
 
         {stage === 'locating' && (
           <div className="note">Getting your location. Allow the permission prompt.</div>
         )}
 
-        {(stage === 'form' || stage === 'saving') && fix && (
+        {(stage === 'form' || stage === 'saving') && (
           <form className="report-card stack" onSubmit={submit}>
             <div className="rep-fix">
-              <span className="label">Your location</span>
-              <span className="num">{fix.lat.toFixed(5)}, {fix.lon.toFixed(5)}</span>
-              {fix.accuracy_m !== null && (
-                <span
-                  className="rep-acc"
-                  data-poor={fix.accuracy_m > 100}
-                  title="How precise this fix is, as reported by your device"
+              <span className="label">
+                {fix?.source === 'gps' && fix.in_area ? 'Your location' : 'Reported location'}
+              </span>
+              {fix && fix.in_area ? (
+                <>
+                  <span className="num">{fix.lat.toFixed(5)}, {fix.lon.toFixed(5)}</span>
+                  {fix.accuracy_m !== null && (
+                    <span
+                      className="rep-acc"
+                      data-poor={fix.accuracy_m > 100}
+                      title="How precise this fix is, as reported by your device"
+                    >
+                      ±{fix.accuracy_m} m
+                      {fix.accuracy_m > 100 && ', poor fix. Move outdoors if you can'}
+                    </span>
+                  )}
+                  {fix.source === 'picked' && <span className="rep-acc">placed by hand</span>}
+                </>
+              ) : (
+                <span className="rep-acc" data-poor="true">not set yet</span>
+              )}
+              {!picking && (
+                <button
+                  type="button"
+                  className="rep-relocate"
+                  onClick={() => setPicking(true)}
                 >
-                  ±{fix.accuracy_m} m
-                  {fix.accuracy_m > 100 && ', poor fix. Move outdoors if you can'}
-                </span>
+                  Change
+                </button>
               )}
             </div>
+
+            {picking && (
+              <LocationPicker
+                value={fix && fix.in_area ? { lat: fix.lat, lon: fix.lon } : null}
+                onChange={(lat, lon) => {
+                  setFix(pickedFix(lat, lon));
+                  setError(null);
+                }}
+              />
+            )}
 
             <div>
               <span className="label">How deep?</span>
@@ -215,7 +272,12 @@ export default function ReportPanel() {
             />
 
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn" type="submit" disabled={stage === 'saving'}>
+              <button
+                className="btn"
+                type="submit"
+                disabled={stage === 'saving' || !fix || !fix.in_area}
+                title={!fix || !fix.in_area ? 'Mark the location first' : undefined}
+              >
                 {stage === 'saving' ? 'Saving…' : 'File report'}
               </button>
               <button className="btn btn-ghost" type="button" onClick={reset}>
