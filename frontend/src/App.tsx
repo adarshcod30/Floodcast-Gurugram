@@ -26,7 +26,10 @@ import ReportPanel from './components/ReportPanel';
 import Simulate from './components/Simulate';
 import Verdict from './components/Verdict';
 import { clock, hourLabel } from './lib/display';
-import { isConfigured as reportsShared } from './lib/reports';
+import {
+  communityReports, isConfigured as reportsShared, onChange as onReportChange,
+  type RemoteReport,
+} from './lib/reports';
 import {
   ATTRACTIONS, HOTSPOTS, loadAirQuality, loadSnapshot, simulate, type Snapshot,
 } from './lib/store';
@@ -68,6 +71,8 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   /** Simulated rainfall in mm/hr, or null when showing the live forecast. */
   const [simulated, setSimulated] = useState<number | null>(null);
+  /** Approved citizen reports from the last 12 hours. */
+  const [community, setCommunity] = useState<RemoteReport[]>([]);
 
   /** Whether the hour scrubber and simulator are expanded. Remembered,
    *  because someone who wants the map full-height wants it every visit,
@@ -117,6 +122,14 @@ export default function App() {
   // Air quality is secondary, so it never blocks the flood answer.
   useEffect(() => {
     void loadAirQuality().then(setAqi).catch(() => setAqi(null));
+  }, []);
+
+  // Approved reports are observations, and they belong next to the model
+  // everywhere the model is shown, not filed away on their own tab.
+  useEffect(() => {
+    const pull = () => void communityReports().then(setCommunity).catch(() => setCommunity([]));
+    pull();
+    return onReportChange(pull);
   }, []);
 
   // A simulation replaces the frames outright rather than merging into
@@ -259,6 +272,7 @@ export default function App() {
           worstWindow={worst?.time_window ?? null}
           aqi={{ value: aqi?.aqi ?? null, category: aqi?.category ?? null }}
           simulated={simulated !== null}
+          reports={community}
         />
 
         {hourly &&
@@ -296,6 +310,7 @@ export default function App() {
             <MapPanel
               hotspots={hotspots}
               attractions={ATTRACTIONS}
+              reports={community}
               riskAt={riskAt}
               showLandmarks={showLandmarks}
               showWatchlist={showWatchlist}

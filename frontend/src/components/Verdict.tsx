@@ -14,6 +14,7 @@
 
 import type { RiskLevel, TimelineFrame } from '../types';
 import { BAND, BAND_ACTION, clock, hourLabel } from '../lib/display';
+import type { RemoteReport } from '../lib/reports';
 
 interface Props {
   frame: TimelineFrame | null;
@@ -23,7 +24,12 @@ interface Props {
   aqi: { value: number | null; category: string | null };
   /** True while the app is showing a hypothetical rather than the forecast. */
   simulated: boolean;
+  /** Approved observations from the last 12 hours. */
+  reports: RemoteReport[];
 }
+
+/** Depths that mean a road is genuinely in trouble, as opposed to wet. */
+const SERIOUS = new Set(['knee', 'waist', 'impassable']);
 
 function frameLevel(frame: TimelineFrame | null): RiskLevel {
   if (!frame || frame.at_risk_count === 0) return 'low';
@@ -31,7 +37,9 @@ function frameLevel(frame: TimelineFrame | null): RiskLevel {
   return frame.risks[0]?.risk_level ?? 'moderate';
 }
 
-export default function Verdict({ frame, total, worstName, worstWindow, aqi, simulated }: Props) {
+export default function Verdict({
+  frame, total, worstName, worstWindow, aqi, simulated, reports,
+}: Props) {
   const level = frameLevel(frame);
   const atRisk = frame?.at_risk_count ?? 0;
   const isNow = frame?.hour_offset === 0;
@@ -75,6 +83,17 @@ export default function Verdict({ frame, total, worstName, worstWindow, aqi, sim
     );
   }
 
+  // Reports are only shown against the live present, never against a
+  // scrubbed future hour or a simulation. A photo taken twenty minutes ago
+  // says nothing about 4pm, and pairing it with a hypothetical would imply
+  // corroboration that does not exist.
+  const live = !simulated && isNow;
+  const serious = live ? reports.filter((r) => SERIOUS.has(r.depth)) : [];
+
+  // The one thing a report can do that the model structurally cannot:
+  // disagree with it. The forecast is a model; a photograph is the road.
+  const contradiction = live && atRisk === 0 && serious.length > 0;
+
   return (
     <section
       className="vb"
@@ -88,6 +107,27 @@ export default function Verdict({ frame, total, worstName, worstWindow, aqi, sim
         </div>
         <h1 className="vb-line">{headline}</h1>
         {detail && <p className="vb-detail">{detail}</p>}
+
+        {contradiction ? (
+          // Deliberately loud. The model saying "clear" while people are
+          // standing in water is the most useful thing this app can tell
+          // anyone, and the observation wins the argument.
+          <p className="vb-contradict">
+            <strong>
+              But {serious.length === 1 ? 'someone has' : `${serious.length} people have`} reported
+              water on the road in the last 12 hours.
+            </strong>{' '}
+            The forecast is a model. A photograph is the road. Check the map before you go.
+          </p>
+        ) : (
+          live &&
+          reports.length > 0 && (
+            <p className="vb-reported">
+              {reports.length} reported {reports.length === 1 ? 'sighting' : 'sightings'} on the map,
+              reviewed and photographed.
+            </p>
+          )
+        )}
       </div>
 
       <div className="vb-metrics">

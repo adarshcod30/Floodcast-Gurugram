@@ -24,7 +24,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 import type { Attraction, Confidence, Hotspot, RiskLevel } from '../types';
-import { BAND, BAND_HEX, CONFIDENCE, clock, isSourced } from '../lib/display';
+import { BAND, BAND_HEX, CONFIDENCE, clock, isSourced, relativeAge } from '../lib/display';
+import { photoUrl, type RemoteReport } from '../lib/reports';
 
 const GURUGRAM: [number, number] = [28.4595, 77.0266];
 
@@ -48,9 +49,44 @@ const NCR_BOUNDS: [[number, number], [number, number]] = [
 const MIN_ZOOM = 10;
 const MAX_ZOOM = 18;
 
+/** Observed depth mapped to the same IMD bands the model uses.
+ *
+ *  Colour still means severity, exactly as everywhere else. What separates an
+ *  observation from a prediction here is the SHAPE: a report is a square, a
+ *  modelled hotspot is a circle, a landmark is a diamond. Someone can tell at
+ *  a glance whether a red mark is something a model computed or something a
+ *  person photographed, which is the distinction that matters most. */
+const DEPTH_BAND: Record<string, RiskLevel> = {
+  ankle: 'moderate',
+  knee: 'high',
+  waist: 'critical',
+  impassable: 'critical',
+};
+
+const DEPTH_LABEL: Record<string, string> = {
+  ankle: 'Ankle deep',
+  knee: 'Knee deep',
+  waist: 'Waist deep',
+  impassable: 'Impassable',
+};
+
+function reportIcon(depth: string): L.DivIcon {
+  const colour = BAND_HEX[DEPTH_BAND[depth] ?? 'moderate'];
+  return L.divIcon({
+    className: '',
+    html:
+      `<div style="width:13px;height:13px;background:${colour};` +
+      `border:2px solid #0E1417;box-shadow:0 0 0 1.5px ${colour}"></div>`,
+    iconSize: [13, 13],
+    iconAnchor: [6.5, 6.5],
+  });
+}
+
 interface Props {
   hotspots: Hotspot[];
   attractions: Attraction[];
+  /** Approved citizen reports. Observations, never scored. */
+  reports: RemoteReport[];
   /** Per-hotspot risk at the selected hour, keyed by hotspot_id. */
   riskAt: Map<string, { risk_level: RiskLevel; risk_score: number; time_window: { starts_at: string; clears_by: string } | null }>;
   showLandmarks: boolean;
@@ -137,6 +173,7 @@ function FitToData({ points }: { points: Array<[number, number]> }) {
 export default function MapPanel({
   hotspots,
   attractions,
+  reports,
   riskAt,
   showLandmarks,
   showWatchlist,
@@ -261,6 +298,34 @@ export default function MapPanel({
           );
         })}
 
+        {/* Observations, drawn last so they sit above the modelled points.
+            A photograph of the road outranks a forecast about it. */}
+        {reports.map((r) => (
+          <Marker
+            key={r.id}
+            position={[r.lat, r.lon]}
+            icon={reportIcon(r.depth)}
+            zIndexOffset={1000}
+          >
+            <Popup>
+              {r.photo_path && (
+                <img className="pop-photo" src={photoUrl(r.photo_path)} alt="" loading="lazy" />
+              )}
+              <div className="pop-name">{DEPTH_LABEL[r.depth] ?? r.depth}</div>
+              <div className="pop-sub">
+                Reported {relativeAge((Date.now() - new Date(r.created_at).getTime()) / 3_600_000)}
+                {r.accuracy_m !== null && ` · ±${Math.round(r.accuracy_m)} m`}
+              </div>
+              {r.note && <p className="pop-note" style={{ marginTop: 6 }}>{r.note}</p>}
+              <div className="pop-note">
+                <strong>Someone was there.</strong> This is an observation with a photo,
+                reviewed before publication. It is shown next to the model and is not used
+                to compute any risk score.
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+
         {showLandmarks &&
           attractions.map((a) => (
             <Marker key={a.poi_id} position={[a.lat, a.lon]} icon={landmarkIcon}>
@@ -315,6 +380,10 @@ export default function MapPanel({
         <div className="legend-row">
           <span style={{ width: 9, height: 9, borderRadius: '50%', border: '1.5px dotted var(--ink-dim)', flex: 'none' }} />
           Structural placeholder
+        </div>
+        <div className="legend-row">
+          <span style={{ width: 9, height: 9, background: 'var(--ink-dim)', flex: 'none' }} />
+          Reported, with a photo
         </div>
       </div>
     </div>
