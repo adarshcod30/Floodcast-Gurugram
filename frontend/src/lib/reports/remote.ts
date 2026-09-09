@@ -69,8 +69,15 @@ async function req<T>(path: string, init: RequestInit & { token?: string } = {})
       }
       throw new RemoteError(detail);
     }
-    if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
+    // An empty body is a normal success here, not an anomaly: an insert
+    // sent with `Prefer: return=minimal` comes back as 201 with no content.
+    // Calling res.json() on that throws a SyntaxError, which the catch below
+    // would report as "could not reach the service" for a request that in
+    // fact succeeded. The report would then be retried and inserted again,
+    // duplicating every submission. So the body is read as text and parsed
+    // only if there is something to parse.
+    const text = await res.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   } catch (err) {
     if (err instanceof RemoteError) throw err;
     if (err instanceof DOMException && err.name === 'AbortError') {
@@ -101,7 +108,19 @@ export async function uploadPhoto(blob: Blob, id: string): Promise<string> {
   return path;
 }
 
-/** Insert a report. Status is set by the database, never by the client. */
+/**
+ * Insert a report. Status is set by the database, never by the client.
+ *
+ * `return=minimal` is required, not a preference. Asking for the inserted
+ * row back makes PostgREST add a RETURNING clause, and RETURNING needs
+ * SELECT permission on the new row. The new row is `pending`, and the whole
+ * point of the policy is that anonymous callers cannot see pending rows, so
+ * the database rejects the statement with "new row violates row-level
+ * security policy" even though the insert itself was permitted.
+ *
+ * That error names the wrong thing and cost a while to track down, so:
+ * the row is written, and nothing is read back.
+ */
 export async function insertReport(row: {
   lat: number;
   lon: number;
@@ -109,13 +128,12 @@ export async function insertReport(row: {
   depth: string;
   note: string;
   photo_path: string | null;
-}): Promise<RemoteReport> {
-  const rows = await req<RemoteReport[]>('/rest/v1/reports', {
+}): Promise<void> {
+  await req<void>('/rest/v1/reports', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify(row),
   });
-  return rows[0];
 }
 
 /** Approved reports from the last 12 hours, newest first. */

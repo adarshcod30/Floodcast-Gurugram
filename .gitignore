@@ -1,10 +1,15 @@
 # ── Secrets ─────────────────────────────────────────────────────────
 # Never commit credentials. .env.example is the committed template.
-# The app itself needs no keys at all: Open-Meteo is keyless, so there is
-# nothing to configure and nothing to leak.
+#
+# frontend/.env.production is the one exception, and only because what it
+# holds is not a credential: a Supabase publishable key grants no authority
+# and ships in the client bundle of every Supabase app regardless. The
+# file itself explains the reasoning and lists the specific things that key
+# was verified unable to do. A service_role key must never go near it.
 .env
 .env.*
 !.env.example
+!frontend/.env.production
 
 # ── Python ──────────────────────────────────────────────────────────
 __pycache__/

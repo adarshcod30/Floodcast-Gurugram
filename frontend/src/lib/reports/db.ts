@@ -31,8 +31,6 @@ export interface QueuedReport {
   status: QueueStatus;
   attempts: number;
   last_error?: string;
-  /** Server id once accepted, so the queue row can be reconciled. */
-  remote_id?: string;
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;

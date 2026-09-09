@@ -140,7 +140,7 @@ export async function sync(): Promise<void> {
         await db.put({ ...row, status: 'uploading' });
 
         const path = row.photo ? await remote.uploadPhoto(row.photo, row.id) : null;
-        const saved = await remote.insertReport({
+        await remote.insertReport({
           lat: row.lat,
           lon: row.lon,
           accuracy_m: row.accuracy_m,
@@ -150,8 +150,10 @@ export async function sync(): Promise<void> {
         });
 
         // Kept, not deleted, so the person who filed it can still see their
-        // own report while it waits for review. Nobody else can.
-        await db.put({ ...row, status: 'sent', remote_id: saved.id, photo: row.photo });
+        // own report while it waits for review. Nobody else can, including
+        // them: the server does not hand back the row it just accepted,
+        // because a pending row is not readable by an anonymous caller.
+        await db.put({ ...row, status: 'sent', photo: row.photo });
       } catch (err) {
         await db.put({
           ...row,

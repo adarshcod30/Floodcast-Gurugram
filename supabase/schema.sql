@@ -49,6 +49,14 @@ alter table public.reports enable row level security;
 -- Anyone may file a report, but only ever as 'pending'. The WITH CHECK is
 -- what stops a crafted request from inserting a row pre-approved and
 -- publishing itself without review.
+--
+-- A CLIENT WRITING TO THIS TABLE MUST NOT ASK FOR THE ROW BACK.
+-- PostgREST turns `Prefer: return=representation` into INSERT ... RETURNING,
+-- and RETURNING needs SELECT permission on the new row. The new row is
+-- 'pending', which anonymous callers are not allowed to read, so Postgres
+-- rejects the whole statement with "new row violates row-level security
+-- policy" even though the insert itself was fine. The error names the
+-- insert, but the read is what failed. Use `Prefer: return=minimal`.
 drop policy if exists "anon can file a pending report" on public.reports;
 create policy "anon can file a pending report"
   on public.reports for insert
