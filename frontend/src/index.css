@@ -1715,6 +1715,14 @@ select.field { cursor: pointer; }
   background: var(--base);
 }
 .place-edit { display: flex; flex-wrap: wrap; gap: 8px; }
+/* The hide confirmation, which reads as a decision rather than a form. */
+.place-hide {
+  padding: 9px;
+  border-left: 2px solid var(--imd-orange);
+  background: var(--raised);
+  border-radius: var(--r-sm);
+}
+
 .place-reason {
   font-size: 11.5px;
   color: var(--ink-dim);

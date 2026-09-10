@@ -444,6 +444,8 @@ function PlaceCard({
   const [open, setOpen] = useState(false);
   const [reports, setReports] = useState<RemoteReport[] | null>(null);
   const [name, setName] = useState(p.label ?? '');
+  /** Non-null while the hide reason is being typed. */
+  const [hiding, setHiding] = useState<string | null>(null);
 
   useEffect(() => setName(p.label ?? ''), [p.label]);
 
@@ -551,20 +553,50 @@ function PlaceCard({
               </button>
             ) : (
               <button
-                className="btn btn-ghost" disabled={busy}
-                onClick={() => {
-                  const reason = window.prompt(
-                    'Hide this place. Why? (kept on the record, not shown publicly)',
-                    '',
-                  );
-                  if (reason === null) return;
-                  onEdit(p.id, { suppressed: true, suppressed_reason: reason.trim() || null });
-                }}
+                className="btn btn-ghost" disabled={busy || hiding !== null}
+                onClick={() => setHiding('')}
               >
                 Hide
               </button>
             )}
           </div>
+
+          {/* Asked inline rather than through window.prompt().
+              A browser dialog blocks the page, ignores every style in this
+              app, and Chrome will suppress it outright after a couple of
+              uses, which for a moderator working through a list is exactly
+              when it would stop appearing. */}
+          {hiding !== null && (
+            <div className="place-edit place-hide">
+              <input
+                className="field field-grow"
+                autoFocus
+                maxLength={200}
+                placeholder="Why hide it? Kept on the record, never shown publicly"
+                value={hiding}
+                onChange={(e) => setHiding(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setHiding(null);
+                  if (e.key === 'Enter') {
+                    onEdit(p.id, { suppressed: true, suppressed_reason: hiding.trim() || null });
+                    setHiding(null);
+                  }
+                }}
+              />
+              <button
+                className="btn" disabled={busy}
+                onClick={() => {
+                  onEdit(p.id, { suppressed: true, suppressed_reason: hiding.trim() || null });
+                  setHiding(null);
+                }}
+              >
+                Hide it
+              </button>
+              <button className="btn btn-ghost" disabled={busy} onClick={() => setHiding(null)}>
+                Cancel
+              </button>
+            </div>
+          )}
 
           {p.suppressed_reason && (
             <div className="place-reason">Hidden because: {p.suppressed_reason}</div>
