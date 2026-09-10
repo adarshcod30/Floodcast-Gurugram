@@ -37,6 +37,9 @@ dist-ssr/
 backend/var/
 
 # ── Editors & OS ────────────────────────────────────────────────────
+# Local editor and tooling configuration. Ports and dev-server commands
+# for one machine, not something anyone cloning this needs.
+.claude/
 .DS_Store
 Thumbs.db
 .idea/
