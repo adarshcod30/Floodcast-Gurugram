@@ -79,11 +79,25 @@ calibration data described in [`docs/GMDA_DATA.md`](docs/GMDA_DATA.md). The
 one point with an exceptional catchment, Hero Honda Chowk at 9.5 sq km, is
 also the one that reliably makes national news.
 
-### The risk model is calibrated, not measured
+### The risk model shipped uncalibrated, and now calibrates itself
 
-Four columns drive every risk score: `rainfall_threshold_mm_per_hr`, `time_to_flood_after_threshold_min`, `typical_drain_time_hr`, and `drainage_capacity_score`. **All four are engineering estimates**, set by severity tier, with no historical rainfall-versus-flood record behind them.
+Four columns drive every risk score: `rainfall_threshold_mm_per_hr`, `time_to_flood_after_threshold_min`, `typical_drain_time_hr`, and `drainage_capacity_score`. All four shipped as **engineering estimates**, set by severity tier, with no historical rainfall-versus-flood record behind them. The scoring *logic* was sound and tested; the *inputs* were not measurements.
 
-The scoring *logic* is sound and tested. The *inputs* are not measurements. This is precisely the piece that becomes real the day GMDA shares historical flood-report data, and the schema is deliberately shaped so that swapping in calibrated values is a data update, not a rewrite.
+Earlier versions of this file said that gap closes the day GMDA shares historical flood-report data. That was wrong, or at least incomplete. A citizen report already carries half the pair: a place, a time, and an observed depth. Open-Meteo supplies the other half, the rainfall that actually fell at that coordinate in the hours before. Put them together and the tool generates its own calibration data without waiting for anybody.
+
+So the register is no longer fixed. Three rules, each stated in the app itself and each living in exactly one function so the code, the docs and the UI cannot drift:
+
+| Rule | Value | Why that value |
+|---|---|---|
+| Reports are the same place within | **500 m** | Nobody stands in the exact same puddle twice. Two reports 80 m apart are one problem, not two pins |
+| A place is promoted after | **3 reports across 2 separate days** | The day count does the work. Four reports during one storm are four people describing one event; three reports on three days are a place that floods |
+| A threshold is published after | **2 separate days at knee-deep or worse, with over 1 mm/hr of rain behind it** | Ankle-deep water is a puddle in a bad kerb. Water with no rain behind it is a burst main or a blocked drain, which is real and worth reporting and says nothing about a rainfall threshold |
+
+A promoted place is drawn on the map as a flood point in its own right, with a dashed ring marking its provenance, and is **never merged into the 73 researched rows**. A measured threshold replaces its hotspot's estimate in the scoring from then on, and is labelled `measured` everywhere it appears.
+
+What gets published is deliberately a weak claim: the **lightest rain ever actually seen to flood that place**. That is a floor, not a fitted curve, and it drops further if a lighter storm ever floods the place again. A regression through four points would be false precision wearing the costume of rigour.
+
+The rules live in [`supabase/schema.sql`](supabase/schema.sql) (`report_cluster_radius_m`, `promotion_rule`, `calibration_rule`, `refresh_observed_place`) and the browser half in [`frontend/src/lib/engine/calibration.ts`](frontend/src/lib/engine/calibration.ts).
 
 ### Every coordinate is approximate
 
@@ -107,6 +121,8 @@ Full methodology: [`data/DATA_PROVENANCE.md`](data/DATA_PROVENANCE.md).
 | **Provenance on every point** | Marker fill encodes certainty, so a placeholder never renders like an MCG-named hotspot |
 | **Rainfall simulator** | Gurugram is dry most of the year. Ask what happens at 20, 35 or 55 mm/hr and watch the register respond, using the same engine as the live verdict |
 | **Citizen reports** | Camera photo, GPS fix with its accuracy, and a depth. Saved on the device first so a failed upload never loses it, and reviewed before anyone else sees it |
+| **A register that learns** | Reports within 500 m are one place. A place reported three times across two separate days becomes a flood point in its own right, drawn with its own provenance and never merged into the researched 73 |
+| **Thresholds measured from reports** | Every approved report gets the rainfall that fell before it attached. A place seen flooded on two separate days publishes the lightest rain that did it, and the model scores it against that number instead of the estimate |
 | **Installable, works offline** | A real PWA. The register is precached, so it opens and draws all 73 points with no connection |
 | **CPCB National AQI** | The 0-500 scale Indian residents and officials actually use, computed from a 24-hour pollutant mean, not a vendor's 1-5 index |
 | **Works on a bad connection** | The register is in the bundle, and the last good forecast is cached, so a failed fetch degrades to stale-but-labelled rather than blank |

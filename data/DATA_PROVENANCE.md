@@ -66,11 +66,14 @@ Calibration ranges used:
 These ranges are engineering placeholders chosen to produce plausible,
 internally-consistent behavior (hypercritical spots flood fast on modest
 rain and drain slowly; minor spots need heavy sustained rain and clear
-quickly) — not validated predictions. **This is exactly the piece that
-would become real if GMDA ever shared historical rainfall-vs-flood-report
-data.** The column names and structure are deliberately kept generic so
-that swapping synthetic values for real, spot-calibrated ones later is a
-data update, not a code rewrite.
+quickly), not validated predictions.
+
+Earlier versions of this document said this piece becomes real only if GMDA
+shares historical rainfall-vs-flood-report data. That was incomplete. The
+project now generates that record itself, one citizen report at a time. See
+section 12. The shipped values in this file are unchanged and remain the
+starting point for every hotspot; what changed is that a hotspot with real
+observations behind it stops being scored against the number in this table.
 
 ## 5. Regenerating this dataset
 Run `python3 data/generate_hotspots.py` from the **repository root**
@@ -308,3 +311,57 @@ licence is published on it. Indian government data of this kind is generally
 reusable with attribution under NDSAP / GODL-India, and it is attributed
 here, but that is an inference rather than a grant. GMDA has not reviewed or
 endorsed this project.
+
+## 12. Community calibration: where the estimates stop being estimates
+
+Section 4 lists four fabricated columns and calls `rainfall_threshold_mm_per_hr`
+the piece that most needs real data. This section is how that data arrives.
+
+**The pair.** A citizen report carries a place, a time and an observed depth.
+Open-Meteo's forecast endpoint, called with `past_days`, returns what actually
+fell at that coordinate in the six hours before. Together they are one
+(rainfall → observed flood depth) pair: exactly the record this document has
+spent every previous section saying nobody publishes.
+
+Six hours because flooding lags rainfall. A road under water at 3pm is usually
+the result of what fell between noon and 3, and a longer window sweeps in
+yesterday's unrelated weather. The pairing runs in the moderator's browser at
+the moment of approval, and backfills anything approved while Open-Meteo was
+unreachable. Open-Meteo's archive only reaches back about a week through this
+endpoint, so a report older than that gets no pair rather than an invented one.
+
+**The rules.** All three live in SQL, in `supabase/schema.sql`, each in its own
+one-line function so a rule can be changed in exactly one place:
+
+| Function | Value | Reasoning |
+|---|---|---|
+| `report_cluster_radius_m()` | 500 m | Nobody stands in the same puddle twice. Reports within 500 m are one place, and the place's coordinate is the running mean of its reports |
+| `promotion_rule()` | 3 reports, 2 distinct days | Four reports during one storm are four people describing one event. Three reports on three days are a place that floods |
+| `calibration_rule()` | knee-deep, over 1 mm/hr, 2 distinct days | Ankle-deep water is a puddle in a bad kerb. Water under 1 mm/hr of rain was caused by something other than that rain (a burst main, a drain backing up, runoff from upstream): real, worth reporting, and silent about rainfall thresholds |
+
+**What is published.** The minimum peak hourly intensity across the qualifying
+pairs. In words: the lightest rain ever actually seen to put knee-deep water
+at that place. This is deliberately a lower bound rather than a fitted
+threshold. It is downward biased with few observations, which for a warning
+system errs towards warning early, and it only ever falls as more evidence
+arrives. A curve fitted through four points would be false precision.
+
+**What it changes.** A place within 500 m of a register hotspot overrides that
+hotspot's `rainfall_threshold_mm_per_hr` for scoring, and every screen that
+shows the number marks it `measured`. A place with no register hotspot nearby
+that clears the promotion rule is drawn on the map as a flood point in its own
+right, with a dashed ring, and is **never merged into the 73 researched rows**.
+The two provenances stay separate: this file describes rows researched from
+public reporting, and a promoted place is not one of them.
+
+**Where the matching happens.** Clustering and calibration run in Postgres,
+which holds every report ever approved. Matching a place to a register hotspot
+runs in the browser, because the register lives in the app bundle and copying
+73 rows into the database would create a second copy free to drift from this
+one. Both use the same haversine and the same 500 m, and a test asserts the
+two radii stay equal.
+
+**Standing limitation.** Report counts measure attention, not severity. A busy
+road full of commuters with phones will out-report a worse but quieter road,
+so count drives *confidence* here and never colour. Colour is always the worst
+depth someone actually reported.
