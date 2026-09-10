@@ -1550,7 +1550,10 @@ select.field { cursor: pointer; }
   padding: 10px 16px 0;
   border-bottom: 1px solid var(--line-soft);
   position: sticky;
-  top: 0;
+  /* Parks below the header bar rather than sliding under it. The header is
+     sticky at 0 and sits on a higher layer, so a tab strip stuck at 0 too
+     just disappears behind it partway down a long list of places. */
+  top: var(--rail-h);
   background: var(--base);
   z-index: 5;
 }
