@@ -94,7 +94,9 @@ export default function ReportPanel() {
     if (!file) return;
     setError(null);
     try {
-      const prepared = await preparePhoto(file);
+      // `capture` on the input asks for the camera; whether the browser
+      // honours it is not knowable here, so this records intent, not proof.
+      const prepared = await preparePhoto(file, true);
       setPhoto(prepared);
       if (preview) URL.revokeObjectURL(preview);
       setPreview(previewUrl(prepared.blob));
@@ -137,10 +139,14 @@ export default function ReportPanel() {
     <div className="scroll">
       <div className="pad stack">
         <div className="note">
-          <b>What this is for.</b> The risk model runs on estimated thresholds, not
-          measurements. A photo of real water at a real coordinate is the one thing that
-          can turn those estimates into something calibrated. That is why this asks for a
-          photo and a depth rather than just a pin.
+          <b>What your report actually does.</b> Three things, in order. It appears on
+          the map for 12 hours once a moderator approves it. It is grouped with every
+          other report within 500 m, and if that spot is reported on three occasions
+          across two separate days it becomes a flood point in its own right, listed
+          alongside the 73 researched ones. And the rainfall that fell there before you
+          photographed it is looked up and stored beside your depth, which is the
+          measurement that replaces this tool's estimated thresholds. Nothing else in
+          the project can produce that number.
         </div>
 
         {shared ? (
@@ -258,6 +264,11 @@ export default function ReportPanel() {
                     {(photo!.bytes / 1024).toFixed(0)} KB · {photo!.width}×{photo!.height}
                   </span>
                 </div>
+              )}
+              {photo && (
+                <p className="rep-hint" data-fresh={freshness(photo).tone}>
+                  {freshness(photo).text}
+                </p>
               )}
               <p className="rep-hint">
                 Photograph the water, not people. Location data inside the photo is stripped
@@ -388,4 +399,36 @@ function statusLabel(status: QueuedReport['status'], shared: boolean): string {
     default:
       return status;
   }
+}
+
+/**
+ * How fresh the photo looks, from its own EXIF timestamp.
+ *
+ * Deliberately worded as an observation rather than a verdict. EXIF is
+ * editable and can be stripped, and the public anon key means a determined
+ * faker can bypass this app entirely and POST straight to the API. This
+ * raises the effort and gives a moderator something to weigh. It does not
+ * make a report true; corroboration across separate days does that.
+ */
+function freshness(photo: PreparedPhoto): { text: string; tone: string } {
+  if (!photo.taken_at) {
+    return {
+      tone: 'unknown',
+      text: 'This photo carries no capture time. That is normal for screenshots and for images that have been edited or forwarded.',
+    };
+  }
+  const mins = (Date.now() - photo.taken_at.getTime()) / 60_000;
+  if (mins < 0) {
+    return { tone: 'warn', text: 'This photo claims a capture time in the future, so its clock is wrong.' };
+  }
+  if (mins <= 60) {
+    return { tone: 'ok', text: `Taken about ${Math.max(1, Math.round(mins))} minutes ago, according to the photo itself.` };
+  }
+  if (mins <= 60 * 24) {
+    return { tone: 'warn', text: `Taken about ${Math.round(mins / 60)} hours ago. Water moves; an older photo may not describe the road now.` };
+  }
+  return {
+    tone: 'warn',
+    text: `Taken ${Math.round(mins / 1440)} days ago. This will most likely be rejected: a report is about the road right now.`,
+  };
 }
