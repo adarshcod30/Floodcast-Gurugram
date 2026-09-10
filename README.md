@@ -747,4 +747,6 @@ derived from MCG and GMDA public reporting and independent news coverage, 2022 t
 
 Built by [Adarsh Dwivedi](https://github.com/adarshcod30).
 
-Licensed under the [MIT Licence](LICENSE).
+Licensed under the [MIT Licence](LICENSE). [NOTICE.md](NOTICE.md) states in
+plain language what the numbers in this tool are, what they are not, and why it
+must not be the sole basis for a safety decision.

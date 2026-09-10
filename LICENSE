@@ -19,13 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-NOTE ON THE DATA
-
-The flood-risk model columns in backend/data/ are engineering estimates, not
-measurements, and 34 of the 64 hotspot rows are unconfirmed or structural
-placeholders. See backend/data/DATA_PROVENANCE.md. This software is provided
-for informational purposes and must not be relied upon as the sole basis for
-any emergency, evacuation, or public-safety decision.
