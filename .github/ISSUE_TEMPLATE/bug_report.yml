@@ -1,0 +1,55 @@
+name: Bug report
+description: Something in the app behaves differently from what it claims
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Before filing: a risk number that looks wrong may not be a bug. Every
+        rainfall threshold shipped as an estimate, and the What's real tab says
+        which numbers are measured and which are not. If a number is labelled
+        as an estimate and reads oddly, that is a data gap, not a defect. Use
+        the data correction template instead.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce it
+      placeholder: |
+        1. Open the Map tab
+        2. Drag the simulator to 35 mm/hr
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: The live site, a local dev server, or a fork?
+      placeholder: https://floodcast-gurugram.vercel.app
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device
+      placeholder: Chrome 141 on Android 15, or Safari on iPhone 15
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors
+      description: Anything red in the browser console, pasted as text.
+      render: text

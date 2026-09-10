@@ -1,0 +1,50 @@
+name: Data correction
+description: A flood point is wrong, missing, misplaced, or badly sourced
+labels: [data]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        The register is 73 points and it is not a claim to completeness. MCG has
+        named 155 waterlogging-prone points, GMDA maintains a shorter list of
+        its own, and none of the official counts reconcile. Corrections are
+        welcome. Sources are required.
+
+  - type: input
+    id: place
+    attributes:
+      label: Which place
+      placeholder: Sheetla Mata Road, or a coordinate
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is wrong with it
+      options:
+        - It floods and is missing from the register
+        - It is in the register but does not actually flood
+        - The coordinate is in the wrong place
+        - The severity or provenance label is wrong
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: source
+    attributes:
+      label: Source
+      description: >-
+        A link, a publication and date, an official list, or a photograph you
+        took with the date and location. First-hand experience is a valid
+        source and will be labelled as unconfirmed rather than sourced, which
+        is exactly what the register's confidence tiers are for.
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Depth, how often, which months, how long it takes to drain.

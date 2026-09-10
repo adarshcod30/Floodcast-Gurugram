@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a flooded road
+    url: https://floodcast-gurugram.vercel.app
+    about: >-
+      Local knowledge belongs in the app, not in an issue. Open the Report tab,
+      take a photo, confirm the location. It reaches the map once reviewed.
+  - name: Report a security problem
+    url: https://github.com/adarshcod30/Floodcast-Gurugram/security/advisories/new
+    about: Please report vulnerabilities privately rather than in a public issue.

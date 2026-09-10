@@ -1,0 +1,31 @@
+name: Feature request
+description: Something the app should do and does not
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >-
+        Describe the situation you are in, not the feature you want. "I cannot
+        tell whether the water on Sohna Road has drained yet" is more useful
+        than "add a drainage timer".
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you think would help
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: honesty
+    attributes:
+      label: Data check
+      options:
+        - label: >-
+            This does not require inventing data the project does not have, or
+            presenting an estimate as a measurement.
+          required: true

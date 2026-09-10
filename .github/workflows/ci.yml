@@ -11,6 +11,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   app:
     name: App - lint, test and build
@@ -20,9 +23,9 @@ jobs:
         working-directory: frontend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: npm
@@ -48,9 +51,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -60,20 +63,32 @@ jobs:
       - name: Regenerate the register from the generators
         # The committed register is the output of these four stages. If the
         # two ever disagree, the JSON the app ships is no longer traceable
-        # to the sourcing recorded in DATA_PROVENANCE.md, which is the one
-        # claim this project cannot afford to get wrong.
+        # to the sourcing recorded in docs/DATA_PROVENANCE.md, which is the
+        # one claim this project cannot afford to get wrong.
         run: |
           python3 data/generate_hotspots.py
           python3 data/generate_expansion.py
           python3 data/generate_2026_monsoon_update.py
           python3 data/export_to_frontend.py
 
-      - name: Committed data matches the generators
+      - name: Text formats are byte identical
+        # CSV and JSON are compared byte for byte, because they are what the
+        # provenance document cites and what the app ships.
+        #
+        # Parquet is deliberately not compared this way. A Parquet file
+        # records the writing library's version in its footer, so the same
+        # rows written by a different pyarrow produce a file of a different
+        # length containing identical data. Byte-comparing it fails for a
+        # reason that has nothing to do with the data. The next step checks
+        # its content instead, which is the stronger test.
         run: |
-          if ! git diff --quiet -- data frontend/src/data; then
+          if ! git diff --quiet -- 'data/*.csv' frontend/src/data; then
             echo "Regenerated data differs from what is committed:"
-            git diff --stat -- data frontend/src/data
+            git diff --stat -- 'data/*.csv' frontend/src/data
             git diff -- frontend/src/data | head -100
             exit 1
           fi
-          echo "Register reproduces exactly."
+          echo "CSV and shipped JSON reproduce exactly."
+
+      - name: Every format agrees on the data
+        run: python3 scripts/check_data_integrity.py
