@@ -1,17 +1,16 @@
+<div align="center">
+
 # Floodcast-Gurugram
 
-**Given the live rainfall forecast, will my route through Gurugram be risky in the next few hours, and when exactly?**
+### Given the live rainfall forecast, will my route through Gurugram be risky in the next few hours, and when exactly?
 
-[![CI](https://github.com/adarshcod30/Floodcast-Gurugram/actions/workflows/ci.yml/badge.svg)](https://github.com/adarshcod30/Floodcast-Gurugram/actions/workflows/ci.yml)
-[![Live](https://img.shields.io/badge/live-floodcast--gurugram.vercel.app-2E9E63)](https://floodcast-gurugram.vercel.app)
-[![PWA](https://img.shields.io/badge/PWA-installable-E2701B)](https://floodcast-gurugram.vercel.app)
-[![Licence](https://img.shields.io/badge/licence-MIT-93A6AE)](LICENSE)
+[![CI](https://github.com/adarshcod30/Floodcast-Gurugram/actions/workflows/ci.yml/badge.svg)](https://github.com/adarshcod30/Floodcast-Gurugram/actions/workflows/ci.yml) [![Live](https://img.shields.io/badge/live-floodcast--gurugram.vercel.app-2E9E63)](https://floodcast-gurugram.vercel.app) [![PWA](https://img.shields.io/badge/PWA-installable-E2701B)](https://floodcast-gurugram.vercel.app) [![Licence](https://img.shields.io/badge/licence-MIT-93A6AE)](LICENSE)
 
-**Live: https://floodcast-gurugram.vercel.app**
+**[Live site](https://floodcast-gurugram.vercel.app)** · [What's real](#read-this-first-what-is-real-and-what-is-not) · [How it learns](#the-model-and-how-it-stops-being-a-guess) · [Data provenance](docs/DATA_PROVENANCE.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
 
-`flood-forecasting` `gurugram` `gurgaon` `monsoon` `urban-flooding` `civic-tech`
-`disaster-preparedness` `open-meteo` `supabase` `react` `typescript` `leaflet`
-`pwa` `offline-first` `open-data` `data-provenance`
+`flood-forecasting` `gurugram` `monsoon` `urban-flooding` `civic-tech` `open-meteo` `supabase` `react` `typescript` `leaflet` `pwa` `offline-first` `data-provenance`
+
+</div>
 
 ---
 
