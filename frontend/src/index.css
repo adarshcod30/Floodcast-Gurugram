@@ -212,6 +212,28 @@ button { cursor: pointer; }
   min-height: 0;
 }
 
+/* The moderation header bar.
+ *
+ * ModeratePanel is the last user of this layout. The rest of the app moved to
+ * a sidebar and the .rail container rule went with it, which left the header's
+ * three children (.rail-mark, .rail-spacer, .rail-stat) as unstyled blocks
+ * stacked in the top-left corner with the page content starting under them.
+ * They were still being styled individually, so nothing looked broken enough
+ * to notice from the code. */
+.rail {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  height: var(--rail-h);
+  padding: 0 16px;
+  background: var(--raised);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 6;
+}
+
 .rail-mark {
   display: flex;
   align-items: baseline;
@@ -1053,7 +1075,27 @@ select.field { cursor: pointer; }
   height: 100%;
   overflow-y: auto;
 }
-.mod .rail-stat { cursor: pointer; }
+/* Back to the map is the only way out of this screen, so it looks like a
+   control rather than a caption. */
+.mod .rail-stat {
+  cursor: pointer;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--raised-2);
+  transition: color 0.12s, border-color 0.12s;
+}
+.mod .rail-stat:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+/* Moderation is reading work: a queue of photographs and a list of places.
+   Left to itself the content stretches the full width of a desktop monitor,
+   which puts a place's name and its controls a screen apart. */
+.mod > .pad,
+.mod > .mod-tabs {
+  width: 100%;
+  max-width: 940px;
+  margin-inline: auto;
+}
 
 /* Measured GMDA figures, visually separated from the computed risk numbers
    above them so a sourced fact never reads as a model output. */
