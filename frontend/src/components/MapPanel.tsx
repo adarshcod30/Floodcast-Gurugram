@@ -336,7 +336,7 @@ export default function MapPanel({
               }}
             >
               <Popup>
-                <div className="pop-name">Reported flood point</div>
+                <div className="pop-name">{p.label || 'Reported flood point'}</div>
                 <div className="pop-sub">
                   Found by {p.report_count} reports across {p.distinct_days} separate days
                 </div>
