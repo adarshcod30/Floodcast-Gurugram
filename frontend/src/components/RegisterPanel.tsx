@@ -112,7 +112,16 @@ export default function RegisterPanel({ hotspots, riskAt }: Props) {
                   <div className="row-name">{h.name}</div>
                   <div className="row-sub">
                     {h.locality_area} · {h.severity_tier} · floods above{' '}
-                    <span className="num">{h.threshold_mm_hr} mm/hr</span> · {c.short}
+                    <span className="num">{h.threshold_mm_hr} mm/hr</span>{' '}
+                    {h.threshold_observed ? (
+                      <span
+                        className="tag-measured"
+                        title={`Measured, not estimated: ${h.threshold_observed.pairs} reports across ${h.threshold_observed.days} days, ${h.threshold_observed.metres_away} m away`}
+                      >
+                        measured
+                      </span>
+                    ) : null}{' '}
+                    · {c.short}
                   </div>
                 </div>
 

@@ -14,11 +14,14 @@
 
 import type { ForecastResponse, Hotspot } from '../types';
 import { CONFIDENCE, isSourced } from '../lib/display';
+import type { ObservedPlace } from '../lib/reports';
 
 interface Props {
   hotspots: Hotspot[];
   forecast: ForecastResponse | null;
   aqiBasis: string | null;
+  /** Places the reports themselves found. Empty when sharing is off. */
+  places: ObservedPlace[];
 }
 
 const TIERS = [
@@ -29,7 +32,7 @@ const TIERS = [
   'reconstructed_estimate',
 ] as const;
 
-export default function AboutPanel({ hotspots, forecast, aqiBasis }: Props) {
+export default function AboutPanel({ hotspots, forecast, aqiBasis, places }: Props) {
   const total = hotspots.length;
   const sourced = hotspots.filter((h) => isSourced(h.data_confidence)).length;
   const pct = total ? Math.round((sourced / total) * 100) : 0;
@@ -41,6 +44,13 @@ export default function AboutPanel({ hotspots, forecast, aqiBasis }: Props) {
   }));
 
   const withGmda = hotspots.filter((h) => h.gmda_drain_area_sq_km != null).length;
+
+  // What the reports have changed so far. These are counts of real rows, so
+  // on a quiet week they read zero, which is the honest answer.
+  const measured = hotspots.filter((h) => h.threshold_observed).length;
+  const promoted = places.filter((p) => p.promoted).length;
+  const gathering = places.length - promoted;
+  const pairs = places.reduce((n, p) => n + (p.calibration_pairs ?? 0), 0);
 
   return (
     <div className="scroll">
@@ -97,20 +107,82 @@ export default function AboutPanel({ hotspots, forecast, aqiBasis }: Props) {
 
         <details className="disc">
           <summary>
-            The risk model is calibrated, not measured
-            <span className="disc-tag" data-tone="warn">estimated</span>
+            Where the risk numbers come from
+            <span className="disc-tag" data-tone={measured > 0 ? 'ok' : 'warn'}>
+              {measured > 0 ? `${measured} measured` : 'estimated'}
+            </span>
           </summary>
           <p>
             Four columns drive every risk score: the rainfall threshold, time-to-flood,
-            drain time and drainage-capacity score. <strong>All four are engineering
-            estimates</strong>, set by severity tier, with no historical rainfall-versus-flood
-            record behind them. The scoring logic is sound and tested; the inputs are not
-            measurements.
+            drain time and drainage-capacity score. They shipped as engineering estimates
+            set by severity tier, with no historical rainfall-versus-flood record behind
+            them. The scoring logic is sound and tested; the inputs were not measurements.
           </p>
           <p>
-            This is the piece that becomes real the day GMDA shares historical flood-report
-            data, and the schema is deliberately shaped so swapping in calibrated values is a
-            data update rather than a rewrite.
+            {measured > 0 ? (
+              <>
+                <strong>
+                  {measured} of {total} thresholds are now measured rather than estimated.
+                </strong>{' '}
+                Those came from citizen reports, not from any authority, and they are
+                marked <span className="tag-measured">measured</span> wherever they appear.
+                The remaining {total - measured} are still estimates and still say so.
+              </>
+            ) : (
+              <>
+                <strong>None of them are measured yet.</strong> The mechanism that
+                measures them is running (see below), and it needs reports before it can
+                say anything. Until then every threshold on this page is an estimate and
+                is labelled as one.
+              </>
+            )}
+          </p>
+        </details>
+
+        <details className="disc">
+          <summary>
+            How this register updates itself
+            <span className="disc-tag" data-tone="ok">live</span>
+          </summary>
+          <p>
+            The 73 researched points are fixed. Everything else here is not: the register
+            learns from what people report, under rules stated in full so you can judge
+            them rather than trust them.
+          </p>
+          <p>
+            <strong>Reports within 500 m are the same place.</strong> Nobody stands in the
+            exact same puddle twice, and treating two reports 80 m apart as two separate
+            floods would scatter one problem across a dozen pins.
+          </p>
+          <p>
+            <strong>Three reports across two separate days promote a place.</strong> The
+            two-day rule is the one that matters: four reports during a single storm are
+            four people describing one event, while three reports on three days are a
+            place that floods. A promoted place is drawn on the map as a flood point in
+            its own right, with a dashed ring, and is never merged into the 73.{' '}
+            {promoted > 0
+              ? `${promoted} ${promoted === 1 ? 'place has' : 'places have'} been promoted this way, and ${gathering} ${gathering === 1 ? 'is' : 'are'} still gathering.`
+              : gathering > 0
+                ? `None have been promoted yet; ${gathering} ${gathering === 1 ? 'place is' : 'places are'} still gathering.`
+                : 'No places have been reported yet.'}
+          </p>
+          <p>
+            <strong>Rainfall is attached to every approved report.</strong> A report
+            carries a place, a time and an observed depth. Open-Meteo supplies what
+            actually fell there in the six hours before it. Together those are the
+            rainfall-versus-flood pair this project spent its first version saying only
+            GMDA could provide. {pairs > 0
+              ? `${pairs} ${pairs === 1 ? 'pair has' : 'pairs have'} been collected so far.`
+              : 'None have been collected yet.'}
+          </p>
+          <p>
+            <strong>A measured threshold is a floor, not a fit.</strong> Once a place has
+            been seen knee-deep or worse on two separate days, the published number is the
+            lightest rain that has ever actually flooded it, and the model scores it
+            against that instead of the estimate. Pairs are ignored when the water was
+            ankle-deep, or when under 1 mm/hr of rain fell, because a blocked drain
+            backing up on a dry day is a real problem and tells you nothing about
+            rainfall. No curve is fitted through four points.
           </p>
         </details>
 
@@ -125,7 +197,8 @@ export default function AboutPanel({ hotspots, forecast, aqiBasis }: Props) {
               GMDA’s published drainage network of 4,701 mapped stream segments. It is shown in
               each map popup and is <strong>deliberately not used in any risk score</strong>,
               because turning a catchment area into a rainfall threshold needs calibration
-              nobody has yet.
+              this geometry cannot supply. The calibration that does exist comes from
+              reports, not from catchments.
             </p>
             <p>
               It also produced an uncomfortable result, kept here rather than buried: median

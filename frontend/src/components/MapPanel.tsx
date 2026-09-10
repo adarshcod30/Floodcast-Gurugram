@@ -25,7 +25,7 @@ import 'leaflet/dist/leaflet.css';
 
 import type { Attraction, Confidence, Hotspot, RiskLevel } from '../types';
 import { BAND, BAND_HEX, CONFIDENCE, clock, isSourced, relativeAge } from '../lib/display';
-import { photoUrl, type RemoteReport } from '../lib/reports';
+import { photoUrl, type ObservedPlace, type RemoteReport } from '../lib/reports';
 
 const GURUGRAM: [number, number] = [28.4595, 77.0266];
 
@@ -87,6 +87,8 @@ interface Props {
   attractions: Attraction[];
   /** Approved citizen reports. Observations, never scored. */
   reports: RemoteReport[];
+  /** Places the reports themselves identified, promoted or still gathering. */
+  places: ObservedPlace[];
   /** Per-hotspot risk at the selected hour, keyed by hotspot_id. */
   riskAt: Map<string, { risk_level: RiskLevel; risk_score: number; time_window: { starts_at: string; clears_by: string } | null }>;
   showLandmarks: boolean;
@@ -174,6 +176,7 @@ export default function MapPanel({
   hotspots,
   attractions,
   reports,
+  places,
   riskAt,
   showLandmarks,
   showWatchlist,
@@ -255,8 +258,22 @@ export default function MapPanel({
                 </div>
                 <div className="pop-kv">
                   <span>Floods above</span>
-                  <span className="num">{h.threshold_mm_hr} mm/hr</span>
+                  <span className="num">
+                    {h.threshold_mm_hr} mm/hr
+                    {h.threshold_observed && <span className="tag-measured">measured</span>}
+                  </span>
                 </div>
+                {h.threshold_observed && (
+                  <div className="pop-note pop-measured">
+                    <strong>This threshold was measured, not estimated.</strong>{' '}
+                    {h.threshold_observed.pairs} reports across{' '}
+                    {h.threshold_observed.days} separate days, from{' '}
+                    {h.threshold_observed.metres_away} m away, put water here at rain this
+                    light. It is the lightest rain anyone has actually seen flood this
+                    place, so it is a floor rather than an exact figure, and it drops
+                    further if a lighter storm ever floods it again.
+                  </div>
+                )}
                 {live?.time_window && (
                   <div className="pop-kv">
                     <span>Window</span>
@@ -292,6 +309,54 @@ export default function MapPanel({
                       the risk score.
                     </>
                   )}
+                </div>
+              </Popup>
+            </CircleMarker>
+          );
+        })}
+
+        {/* Places the reports themselves identified. A promoted one has
+            cleared corroboration on separate days and is a flood point in
+            its own right, so it is drawn as a circle like the register.
+            The dashed ring is its provenance: found by people, not by a
+            newspaper, and never merged into the 73 sourced rows. */}
+        {places.filter((p) => p.promoted).map((p) => {
+          const colour = BAND_HEX[DEPTH_BAND[p.worst_depth ?? 'ankle'] ?? 'moderate'];
+          return (
+            <CircleMarker
+              key={p.id}
+              center={[p.lat, p.lon]}
+              radius={7}
+              pathOptions={{
+                color: colour,
+                weight: 2,
+                dashArray: '3,2',
+                fillColor: colour,
+                fillOpacity: 0.45,
+              }}
+            >
+              <Popup>
+                <div className="pop-name">Reported flood point</div>
+                <div className="pop-sub">
+                  Found by {p.report_count} reports across {p.distinct_days} separate days
+                </div>
+                <div className="pop-kv">
+                  <span>Worst seen</span>
+                  <span style={{ color: colour, fontWeight: 600 }}>
+                    {DEPTH_LABEL[p.worst_depth ?? ''] ?? p.worst_depth}
+                  </span>
+                </div>
+                <div className="pop-kv">
+                  <span>Last reported</span>
+                  <span className="num">
+                    {p.last_seen ? relativeAge((Date.now() - new Date(p.last_seen).getTime()) / 3_600_000) : 'unknown'}
+                  </span>
+                </div>
+                <div className="pop-note">
+                  <strong>Learned, not researched.</strong> This place is not one of the 73
+                  sourced points. It is here because people repeatedly photographed water
+                  here on different days. It carries its own provenance and is never merged
+                  into the researched register.
                 </div>
               </Popup>
             </CircleMarker>
@@ -384,6 +449,10 @@ export default function MapPanel({
         <div className="legend-row">
           <span style={{ width: 9, height: 9, background: 'var(--ink-dim)', flex: 'none' }} />
           Reported, with a photo
+        </div>
+        <div className="legend-row">
+          <span style={{ width: 9, height: 9, borderRadius: '50%', border: '1.5px dashed var(--ink-dim)', background: 'rgba(147,166,174,0.45)', flex: 'none' }} />
+          Learned from reports
         </div>
       </div>
     </div>

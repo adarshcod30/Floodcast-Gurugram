@@ -621,6 +621,25 @@ select.field { cursor: pointer; }
   font-size: 11px; color: var(--ink-dim); line-height: 1.45;
 }
 
+/* A measured number is a different kind of claim from an estimated one, so
+   it gets a mark of its own. Deliberately not an IMD band colour: those mean
+   severity, and reusing one here would say "this place is fine" rather than
+   "this figure is real". */
+.tag-measured {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  margin-left: 5px;
+  border-radius: 99px;
+  border: 1px solid var(--imd-green);
+  color: var(--imd-green);
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+.pop-measured { border-top-color: var(--imd-green); }
+
 .legend {
   position: absolute;
   left: 12px; bottom: 12px;
@@ -1461,3 +1480,9 @@ select.field { cursor: pointer; }
   margin-bottom: 7px;
   display: block;
 }
+
+/* Photo freshness. A signal about the file, not a verdict about the report,
+   so it is stated quietly and never in the take-action red. */
+.rep-hint[data-fresh='ok']      { color: var(--imd-green); }
+.rep-hint[data-fresh='warn']    { color: var(--imd-yellow); }
+.rep-hint[data-fresh='unknown'] { color: var(--ink-dim); }
