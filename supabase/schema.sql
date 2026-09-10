@@ -259,7 +259,13 @@ create table if not exists public.observed_places (
 
   observed_threshold_mm_hr double precision,
   threshold_days           int not null default 0,
-  calibration_pairs        int not null default 0
+  calibration_pairs        int not null default 0,
+
+  -- A moderator hid this place. Suppression sits on top of the promotion
+  -- rule rather than replacing it, so nothing is lost: unsuppress and the
+  -- place returns to whatever its reports actually support.
+  suppressed        boolean not null default false,
+  suppressed_reason text
 );
 
 comment on column public.observed_places.observed_threshold_mm_hr is
@@ -315,6 +321,7 @@ declare
   min_r int; min_d int;
   cal_rank int; cal_rain double precision; cal_days int;
   obs_threshold double precision; obs_days int; obs_pairs int;
+  is_suppressed boolean; qualifies boolean;
 begin
   select count(*),
          count(distinct (created_at at time zone 'Asia/Kolkata')::date),
@@ -346,6 +353,11 @@ begin
     and (case depth when 'impassable' then 4 when 'waist' then 3
                     when 'knee' then 2 else 1 end) >= cal_rank;
 
+  select suppressed into is_suppressed from public.observed_places where id = p_place;
+  qualifies := coalesce(r_count,0) >= min_r
+           and coalesce(d_count,0) >= min_d
+           and not coalesce(is_suppressed, false);
+
   update public.observed_places p
      set report_count  = coalesce(r_count, 0),
          distinct_days = coalesce(d_count, 0),
@@ -354,12 +366,10 @@ begin
          last_seen     = l_seen,
          lat           = coalesce(c_lat, p.lat),
          lon           = coalesce(c_lon, p.lon),
-         promoted      = (coalesce(r_count,0) >= min_r and coalesce(d_count,0) >= min_d),
+         promoted      = qualifies,
          promoted_at   = case
-                           when (coalesce(r_count,0) >= min_r and coalesce(d_count,0) >= min_d)
-                                and p.promoted_at is null then now()
-                           when not (coalesce(r_count,0) >= min_r and coalesce(d_count,0) >= min_d)
-                                then null
+                           when qualifies and p.promoted_at is null then now()
+                           when not qualifies then null
                            else p.promoted_at
                          end,
          calibration_pairs = coalesce(obs_pairs, 0),
@@ -368,7 +378,7 @@ begin
          -- pairs are counted, so the UI can show progress, but no number is
          -- claimed.
          observed_threshold_mm_hr =
-           case when coalesce(obs_days,0) >= cal_days
+           case when coalesce(obs_days,0) >= cal_days and not coalesce(is_suppressed, false)
                 then round(obs_threshold::numeric, 1)::double precision
                 else null end
    where p.id = p_place;
@@ -449,11 +459,55 @@ drop policy if exists "anyone reads observed places" on public.observed_places;
 create policy "anyone reads observed places"
   on public.observed_places for select
   to anon, authenticated
-  using (report_count > 0);
+  using (report_count > 0 and not suppressed);
 
--- No insert, update or delete policy: places are written only by the
--- triggers above, which run as definer. A leaked anon key cannot invent a
--- flood point or move one.
+-- Suppressing has to re-run the rule for that place, and a moderator's
+-- UPDATE is the only write that reaches this table from outside the triggers.
+create or replace function public.after_place_edit()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+begin
+  if new.suppressed is distinct from old.suppressed then
+    perform public.refresh_observed_place(new.id);
+  end if;
+  return null;
+end $function$;
+
+drop trigger if exists places_after_edit on public.observed_places;
+create trigger places_after_edit
+  after update of suppressed on public.observed_places
+  for each row execute function public.after_place_edit();
+
+drop policy if exists "moderators read all places" on public.observed_places;
+create policy "moderators read all places"
+  on public.observed_places for select
+  to authenticated
+  using (public.is_moderator());
+
+drop policy if exists "moderators edit places" on public.observed_places;
+create policy "moderators edit places"
+  on public.observed_places for update
+  to authenticated
+  using (public.is_moderator())
+  with check (public.is_moderator());
+
+-- The part that actually stops a hand-typed measurement.
+--
+-- Row level security decides which ROWS a moderator may touch. Only column
+-- grants decide which COLUMNS, and without these a moderator could PATCH
+-- report_count or observed_threshold_mm_hr directly and manufacture a
+-- measurement nobody observed. Those columns are writable by
+-- refresh_observed_place alone, which runs as definer.
+--
+-- No insert or delete for anyone: places are created by the triggers above,
+-- and a leaked anon key cannot invent a flood point, move one, or erase one.
+revoke insert, update, delete on public.observed_places from anon, authenticated;
+grant select on public.observed_places to anon, authenticated;
+grant update (label, hotspot_id, suppressed, suppressed_reason)
+  on public.observed_places to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Backfilling reports approved before these triggers existed

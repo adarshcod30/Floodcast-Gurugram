@@ -214,6 +214,11 @@ export interface ObservedPlace {
   /** Reports behind that number, and the separate days they came from. */
   calibration_pairs: number;
   threshold_days: number;
+  /** A moderator hid this place. The promotion rule still evaluates
+   *  underneath, so restoring it returns whatever the reports actually say
+   *  rather than whatever they said on the day it was hidden. */
+  suppressed?: boolean;
+  suppressed_reason?: string | null;
 }
 
 /**
@@ -231,10 +236,18 @@ export async function listObservedPlaces(): Promise<ObservedPlace[]> {
 }
 
 /** Approved reports belonging to one place, for the calibration pairs. */
-export async function listPlaceReports(placeId: string): Promise<RemoteReport[]> {
+export async function listPlaceReports(
+  placeId: string,
+  token?: string,
+): Promise<RemoteReport[]> {
+  // A moderator gets everything at this place, rejected rows included, since
+  // "why is this place here" is usually answered by what was thrown out.
+  // Anyone else gets what row level security would have given them anyway.
   return req<RemoteReport[]>(
     `/rest/v1/reports?select=*&place_id=eq.${encodeURIComponent(placeId)}` +
-      '&status=eq.approved&order=created_at.desc&limit=200',
+      (token ? '' : '&status=eq.approved') +
+      '&order=created_at.desc&limit=200',
+    { token },
   );
 }
 
@@ -276,4 +289,37 @@ export async function listUnpaired(token: string): Promise<RemoteReport[]> {
       `&created_at=gte.${since}&order=created_at.desc&limit=50`,
     { token },
   );
+}
+
+/**
+ * Every place, including suppressed ones and those whose reports have all
+ * been rejected. Moderator only: the public listing hides both.
+ */
+export async function listAllPlaces(token: string): Promise<ObservedPlace[]> {
+  return req<ObservedPlace[]>(
+    '/rest/v1/observed_places?select=*&order=last_seen.desc.nullslast&limit=500',
+    { token },
+  );
+}
+
+/**
+ * Name a place, tie it to a register point, or hide it.
+ *
+ * Only these four columns are writable, and that is enforced by column
+ * grants in the database rather than by this signature. A moderator cannot
+ * hand-type a report count or a measured threshold: those are written by
+ * refresh_observed_place and nothing else, so a measurement on this map is
+ * always something people actually observed.
+ */
+export async function updatePlace(
+  id: string,
+  patch: { label?: string | null; hotspot_id?: string | null; suppressed?: boolean; suppressed_reason?: string | null },
+  token: string,
+): Promise<void> {
+  await req<void>(`/rest/v1/observed_places?id=eq.${id}`, {
+    method: 'PATCH',
+    token,
+    headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify(patch),
+  });
 }

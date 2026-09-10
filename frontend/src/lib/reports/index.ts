@@ -146,6 +146,13 @@ export async function fileReport(draft: Draft): Promise<db.QueuedReport> {
 type Listener = () => void;
 const listeners = new Set<Listener>();
 
+/** Tell the app something it displays has changed. Used by the moderation
+ *  screen, whose approvals change the map for everyone, not just the
+ *  moderator's own queue. */
+export function notifyChange(): void {
+  emit();
+}
+
 export function onChange(fn: Listener): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
