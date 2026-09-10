@@ -1,25 +1,51 @@
 /**
- * The hotspot register — all 73 points, searchable and filterable.
+ * The hotspot register: all 73 researched points, searchable and filterable,
+ * plus any place the reports themselves have promoted.
  *
  * Every row leads with a provenance dot whose FILL encodes certainty,
  * matching the map. The register is where an evaluator checks the
  * project's claims, so the filter offers provenance as a first-class
  * axis: "show me only what you can actually source" is one click.
+ *
+ * Promoted places sit in their own block above the 73 rather than mixed in.
+ * They are flood points, but they were found by people photographing water
+ * rather than by public reporting, and merging the two provenances into one
+ * list would quietly destroy the distinction the rest of this app protects.
  */
 
 import { useMemo, useState } from 'react';
 
 import type { Confidence, Hotspot, RiskLevel } from '../types';
 import { BAND, CONFIDENCE, clock, isSourced } from '../lib/display';
+import type { ObservedPlace } from '../lib/reports';
+import { MATCH_RADIUS_M, metresBetween } from '../lib/engine/calibration';
 
 interface Props {
   hotspots: Hotspot[];
   riskAt: Map<string, { risk_level: RiskLevel; risk_score: number; time_window: { starts_at: string; clears_by: string } | null }>;
+  /** Places the reports promoted. Empty when sharing is off. */
+  places: ObservedPlace[];
 }
+
+const DEPTH_LABEL: Record<string, string> = {
+  ankle: 'ankle deep',
+  knee: 'knee deep',
+  waist: 'waist deep',
+  impassable: 'impassable',
+};
+
+/** Observed depth on the same bands the model uses, so one colour vocabulary
+ *  covers both a prediction and an observation. */
+const DEPTH_BAND: Record<string, RiskLevel> = {
+  ankle: 'moderate',
+  knee: 'high',
+  waist: 'critical',
+  impassable: 'critical',
+};
 
 type ConfFilter = 'all' | 'sourced' | Confidence;
 
-export default function RegisterPanel({ hotspots, riskAt }: Props) {
+export default function RegisterPanel({ hotspots, riskAt, places }: Props) {
   const [query, setQuery] = useState('');
   const [tier, setTier] = useState('all');
   const [conf, setConf] = useState<ConfFilter>('all');
@@ -45,6 +71,17 @@ export default function RegisterPanel({ hotspots, riskAt }: Props) {
   }, [hotspots, riskAt, query, tier, conf]);
 
   const sourcedCount = hotspots.filter((h) => isSourced(h.data_confidence)).length;
+
+  // Only shown when a search or filter has not been narrowed to the
+  // researched rows, so "sourced only" still means only the sourced 73.
+  const learned = useMemo(() => {
+    if (conf !== 'all' || tier !== 'all') return [];
+    const q = query.trim().toLowerCase();
+    return places
+      .filter((p) => p.promoted)
+      .filter((p) => !q || (p.label ?? 'reported flood point').toLowerCase().includes(q))
+      .sort((a, b) => b.report_count - a.report_count);
+  }, [places, conf, tier, query]);
 
   return (
     <div className="scroll">
@@ -84,6 +121,61 @@ export default function RegisterPanel({ hotspots, riskAt }: Props) {
       </div>
 
       <div className="rows">
+        {learned.length > 0 && (
+          <>
+            <div className="rows-sep">
+              Found by reports
+              <span>
+                not part of the researched {hotspots.length}, and never merged into them
+              </span>
+            </div>
+            {learned.map((p) => {
+              // Named by whoever is nearest in the register, purely as
+              // orientation. The row keeps its own title so it can never be
+              // mistaken for the researched point of that name.
+              let near: { name: string; m: number } | null = null;
+              for (const h of hotspots) {
+                const m = metresBetween(p.lat, p.lon, h.latitude, h.longitude);
+                if (m <= MATCH_RADIUS_M && (near === null || m < near.m)) {
+                  near = { name: h.name, m };
+                }
+              }
+              return (
+              <div
+                key={p.id}
+                className="row row-learned"
+                style={{ ['--band' as string]: BAND[DEPTH_BAND[p.worst_depth ?? 'ankle'] ?? 'moderate'] }}
+              >
+                <span className="dot dot-learned" title="Found by citizen reports" />
+                <div className="row-main">
+                  <div className="row-name">
+                    {p.label || 'Reported flood point'}
+                    {near && <> <span className="row-near">near {near.name}</span></>}
+                  </div>
+                  <div className="row-sub">
+                    {p.report_count} reports over {p.distinct_days} days · worst{' '}
+                    {DEPTH_LABEL[p.worst_depth ?? ''] ?? p.worst_depth}
+                    {p.observed_threshold_mm_hr !== null && (
+                      <>
+                        {' '}· floods above{' '}
+                        <span className="num">{p.observed_threshold_mm_hr} mm/hr</span>{' '}
+                        <span className="tag-measured">measured</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="row-right">
+                  <div className="row-clear num">
+                    {p.lat.toFixed(3)}, {p.lon.toFixed(3)}
+                  </div>
+                </div>
+              </div>
+              );
+            })}
+            <div className="rows-sep">Researched register</div>
+          </>
+        )}
+
         {rows.length === 0 ? (
           <p className="empty">
             <b>Nothing matches</b>

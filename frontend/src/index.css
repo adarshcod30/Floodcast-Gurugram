@@ -1438,20 +1438,33 @@ select.field { cursor: pointer; }
   .prov-blurb { display: none; }
 }
 
+/* A moderator opens this several times a day, so it is a control rather
+   than a line of small print that happens to be clickable. */
 .nav-mod {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   width: 100%;
-  margin-top: 7px;
-  padding: 0;
+  margin-top: 9px;
+  padding: 8px 10px;
   font: inherit;
-  font-size: 11px;
-  color: var(--ink-faint);
-  background: none;
-  border: none;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-dim);
+  background: var(--raised-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
   cursor: pointer;
   text-align: left;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
 }
-.nav-mod:hover { color: var(--ink-dim); text-decoration: underline; }
+.nav-mod:hover {
+  color: var(--ink);
+  background: var(--raised);
+  border-color: var(--ink-faint);
+}
+.nav-mod:active { transform: translateY(0.5px); }
+.nav-mod svg { flex: none; opacity: 0.8; }
 
 /* A report contradicting the model is the most useful thing this app can
    say, so it is deliberately loud and uses the take-action red regardless
@@ -1486,3 +1499,229 @@ select.field { cursor: pointer; }
 .rep-hint[data-fresh='ok']      { color: var(--imd-green); }
 .rep-hint[data-fresh='warn']    { color: var(--imd-yellow); }
 .rep-hint[data-fresh='unknown'] { color: var(--ink-dim); }
+
+/* ── Moderation ────────────────────────────────────────────────────────── */
+
+.mod-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 10px 16px 0;
+  border-bottom: 1px solid var(--line-soft);
+  position: sticky;
+  top: 0;
+  background: var(--base);
+  z-index: 5;
+}
+.mod-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-faint);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+.mod-tab:hover { color: var(--ink-dim); }
+.mod-tab[aria-selected='true'] { color: var(--ink); border-bottom-color: var(--ink); }
+.mod-tab-n {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: var(--raised-2);
+  color: var(--ink-faint);
+}
+.mod-tab-n[data-hot='true'] { background: var(--imd-orange); color: #10171A; font-weight: 600; }
+
+/* Four numbers a moderator wants before reading anything: what is live,
+   what is close, what has been measured, what was hidden. */
+.mod-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.mod-stat { background: var(--raised); padding: 11px 12px; }
+.mod-stat-n { font-size: 21px; font-weight: 600; line-height: 1.1; color: var(--ink); }
+.mod-stat-l {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  margin-top: 3px;
+}
+
+.mod-card { border-left: 2px solid var(--imd-yellow); }
+.mod-hint {
+  font-size: 11px;
+  color: var(--ink-faint);
+  line-height: 1.45;
+  margin-top: 8px;
+}
+.mod-sep {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  margin: 6px 0 -4px;
+}
+
+.place-card {
+  background: var(--raised);
+  border: 1px solid var(--line-soft);
+  border-left: 2px solid var(--ink-faint);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+/* The border says what this place is doing to the model, which is the thing
+   a moderator is actually deciding about. */
+.place-card[data-state='promoted'] { border-left-color: var(--imd-orange); }
+.place-card[data-state='hidden']   { border-left-color: var(--line); opacity: 0.62; }
+
+.place-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  width: 100%;
+  padding: 12px 14px 8px;
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ink);
+}
+.place-head:hover { background: var(--raised-2); }
+.place-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.place-sub { font-size: 11px; color: var(--ink-faint); }
+.place-chev {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.place-state {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+.place-state[data-state='promoted'] { border-color: var(--imd-orange); color: var(--imd-orange); }
+
+.place-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding: 0 14px 12px;
+  font-size: 11.5px;
+  color: var(--ink-dim);
+}
+.place-stats b { color: var(--ink); font-weight: 600; }
+.place-progress { color: var(--ink-faint); }
+
+.place-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--base);
+}
+.place-edit { display: flex; flex-wrap: wrap; gap: 8px; }
+.place-reason {
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  border-left: 2px solid var(--line);
+  padding-left: 9px;
+}
+
+.place-reports { display: flex; flex-direction: column; gap: 9px; }
+.place-report {
+  display: flex;
+  gap: 10px;
+  padding: 9px;
+  background: var(--raised);
+  border-radius: var(--r-sm);
+}
+.place-report[data-status='rejected'] { opacity: 0.5; }
+.place-report-main { min-width: 0; flex: 1; }
+.place-report-top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  color: var(--ink);
+}
+.place-report-top .num { color: var(--ink-faint); font-size: 11px; }
+.place-report-rain { font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
+.place-report-note {
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 620px) {
+  .mod-stats { grid-template-columns: repeat(2, 1fr); }
+  .place-chev { display: none; }
+  .place-head { grid-template-columns: 1fr; }
+}
+
+/* ── Places the reports found, inside the register ─────────────────────── */
+
+/* A heading between two blocks of rows, so a promoted place is never read
+   as one of the researched 73. */
+.rows-sep {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 14px 16px 6px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+  border-bottom: 1px solid var(--line-soft);
+}
+.rows-sep span {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.row-learned .row-name { font-weight: 500; }
+.row-near {
+  margin-left: 7px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-faint);
+}
+/* Hollow with a dashed edge, matching its marker on the map: this point is
+   real, and it came from a different place than the register did. */
+.dot-learned {
+  background: transparent;
+  border: 1.5px dashed var(--band);
+}
+
+@media (max-width: 620px) {
+  .rows-sep { flex-direction: column; gap: 2px; }
+}

@@ -279,6 +279,7 @@ export default function App() {
                 setModerating(true);
               }}
             >
+              <NavIcon name="review" />
               Review queue
             </button>
           )}
@@ -340,7 +341,9 @@ export default function App() {
               onToggleWatchlist={() => setShowWatchlist((v) => !v)}
             />
           )}
-          {tab === 'register' && <RegisterPanel hotspots={hotspots} riskAt={riskAt} />}
+          {tab === 'register' && (
+            <RegisterPanel hotspots={hotspots} riskAt={riskAt} places={places} />
+          )}
           {tab === 'ask' && <AskPanel snapshot={snapshot} />}
           {tab === 'report' && <ReportPanel />}
           {tab === 'about' && (

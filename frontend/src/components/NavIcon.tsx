@@ -1,13 +1,13 @@
 /**
  * Navigation glyphs.
  *
- * Hand-drawn 16px paths rather than an icon package: five glyphs do not
+ * Hand-drawn 16px paths rather than an icon package: six glyphs do not
  * justify a dependency, and this keeps the bundle honest. They are
  * decorative next to a text label, so they are hidden from assistive
  * technology rather than given redundant names.
  */
 
-export type IconName = 'map' | 'register' | 'ask' | 'report' | 'about';
+export type IconName = 'map' | 'register' | 'ask' | 'report' | 'about' | 'review';
 
 const PATHS: Record<IconName, React.ReactNode> = {
   // A folded map.
@@ -16,6 +16,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M1.5 4.2 6 2.5v11.3L1.5 15.5V4.2Z" />
       <path d="M6 2.5l4.5 1.7v11.3L6 13.8V2.5Z" />
       <path d="M10.5 4.2 15 2.5v11.3l-4.5 1.7V4.2Z" />
+    </>
+  ),
+  // A tray with something waiting in it.
+  review: (
+    <>
+      <path d="M2 9.5V13a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 14 13V9.5h-3.5l-1 1.5h-3l-1-1.5H2Z" />
+      <path d="M8 1.8v5.4M5.8 5l2.2 2.2L10.2 5" />
     </>
   ),
   // A list.
