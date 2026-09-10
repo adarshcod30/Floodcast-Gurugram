@@ -1097,6 +1097,28 @@ select.field { cursor: pointer; }
   margin-inline: auto;
 }
 
+/* Reading and typing want a column, not a monitor.
+ *
+ * On a 1440px screen the report form and the ask box were stretching past
+ * 1100px, which puts a text field a foot wide and the depth buttons at
+ * opposite ends of the screen from each other. What's real already capped
+ * itself at 760; this gives the other two the same treatment.
+ *
+ * The register is deliberately left full width. It is a table, name on the
+ * left and the flooding window on the right, and a table is the one layout
+ * that actually earns the space. */
+.view > .scroll > .pad.stack {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+}
+.ask-log,
+.ask-form {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+}
+
 /* Measured GMDA figures, visually separated from the computed risk numbers
    above them so a sourced fact never reads as a model output. */
 .pop-gmda {
