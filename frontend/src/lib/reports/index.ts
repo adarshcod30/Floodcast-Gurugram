@@ -14,6 +14,7 @@
 import * as db from './db';
 import * as remote from './remote';
 import type { PreparedPhoto } from './image';
+import { deviceId } from './device';
 
 export { preparePhoto, previewUrl, PhotoError, type PreparedPhoto } from './image';
 export { isConfigured, photoUrl } from './remote';
@@ -189,6 +190,7 @@ export async function sync(): Promise<void> {
           depth: row.depth,
           note: row.note,
           photo_path: path,
+          device_id: deviceId(),
         });
 
         // Kept, not deleted, so the person who filed it can still see their

@@ -27,7 +27,11 @@ security in Postgres, verified against that exact key rather than assumed:
 | Insert an already-approved report | 401, policy violation |
 | Read a report that is awaiting review | `[]`, invisible |
 | Approve or reject any report | 0 rows changed |
-| Delete any report | 0 rows, no delete policy exists |
+| Delete any report or place | 0 rows, no DELETE policy exists for anyone |
+| Call `delete_report` / `delete_place` | Refused, EXECUTE is revoked from `anon` |
+| Delete a photo from the bucket | Refused, the delete policy requires a moderator |
+| File a second report for the same place within 6 hours | Refused by a trigger, unless the water is deeper |
+| File a report with no `device_id` | Refused, so the limit cannot be skipped |
 | Rename or hide a place | 401, permission denied |
 | Edit a report count or a measured threshold | denied by column grant |
 | Upload anything that is not a JPEG | 400, the bucket rejects the mime type |
@@ -49,10 +53,26 @@ readers. In practice an unreviewed photo's location is a 128-bit secret. That
 is obscurity, not a permission boundary. Closing it properly means a private
 bucket and an edge function minting a signed URL on approval.
 
-**There is no per-IP rate limit on inserts.** PostgREST does not expose the
-client address to a policy. Abuse is bounded by moderation (nothing is public
-until approved), the 1 MB per-file cap, and the storage quota. A determined
-flooder can still fill the bucket.
+**The report limit identifies a browser, not a person.** Reports are scoped to
+one per `(device_id, place)` per six hours, with deeper water always allowed
+through. `device_id` is a uuid this app generates and keeps in `localStorage`.
+Clearing site data, a private window, or posting straight to the API with a
+random uuid each time all defeat it. It is a civility limit: it stops a
+double-tapped submit and casual repetition, and the interface says so rather
+than implying enforcement it does not have.
+
+**There is still no per-IP limit.** PostgREST does not expose the client
+address to a policy, so that needs an edge function in front of the insert.
+Remaining abuse is bounded by moderation (nothing is public until approved),
+the 1 MB per-file cap, and the storage quota. A determined flooder rotating
+device ids can still fill the bucket.
+
+**Deletion is audited, not prevented.** A moderator can permanently delete a
+report or a place. Every deletion writes the full row, the reason and the
+moderator's id into `moderation_deletions` first, so a compromised moderator
+account can destroy data but cannot do it quietly. A leaked publishable key
+cannot delete anything at all: there is no `DELETE` policy on any table and
+`EXECUTE` on both functions is revoked from `anon`.
 
 **A camera photo is a signal, not proof.** The `capture` attribute is a hint
 browsers may ignore, EXIF timestamps are trivially editable, and the public key
@@ -64,5 +84,6 @@ decides.
 
 - The publishable key being in the repository or the bundle
 - The photo bucket being public-read, which is documented above
-- Missing rate limiting on report submission, which is documented above
+- The report limit being defeatable by clearing storage, which is documented above
+- The absence of a per-IP limit, which is documented above
 - Anything reachable only with the `service_role` key, which is not published

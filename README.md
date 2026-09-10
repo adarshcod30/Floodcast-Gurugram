@@ -240,6 +240,44 @@ Without that second line a signed-in moderator could PATCH a threshold straight 
 PostgREST and manufacture a measurement nobody observed. So a number marked `measured` on
 this map is always something people actually stood in.
 
+**Deleting, as distinct from hiding.** Hiding is reversible and keeps the evidence, which
+is right for a place that might come back. It is wrong for a photograph that should not be
+stored at all, so a moderator can also delete a report or an entire place outright.
+
+Deletion is deliberately **not** a `DELETE` policy. The tables still grant `DELETE` to
+nobody, so a leaked publishable key cannot erase what anybody reported. It goes through a
+function that demands an allowlisted moderator, demands a reason of at least three
+characters, and writes the whole row into `moderation_deletions` before removing it. A
+deletion that leaves no trace of what was deleted is indistinguishable from one that never
+happened. The photo goes first, through the Storage API from the moderator's own browser,
+because Supabase refuses direct SQL deletes on storage and doing it in that order means a
+crash between the two steps leaves a visible broken report rather than an invisible
+orphaned photograph of somebody's street.
+
+### One report per place, per six hours
+
+Rate limiting here is scoped to **(browser, place)** rather than to a global count.
+Somebody walking home past three flooded roads should file three reports and be thanked
+for it. What is worthless is the same person reporting the same puddle repeatedly.
+
+| | |
+|---|---|
+| Different places, same browser | Always allowed |
+| Same place, within 6 hours, same or shallower | **Refused**, with the reason and what to do instead |
+| Same place, within 6 hours, **deeper** | Allowed. Water getting worse is the most useful thing anyone can report |
+| No browser id at all | Refused, so the limit is not optional for whoever reads this source |
+
+**This is a civility limit and not a security control**, and the difference matters.
+`device_id` identifies a browser, not a person: there is no login for reporters, on purpose,
+because requiring an account to say "this road is under water" would lose most of the
+reports worth having. Clearing site data, a private window, or posting straight to the API
+with a random uuid all get a fresh id. It stops a double-tapped submit button and casual
+repetition. Moderation is what stops anyone determined, and nothing in the interface
+pretends otherwise.
+
+Note that spamming one place could never force a promotion anyway: the rule counts
+**distinct days**, so twenty reports in one afternoon are still one day.
+
 ---
 
 ## Architecture
@@ -675,7 +713,9 @@ Stated plainly, because a tool that overstates its confidence is worse than no t
    here and never colour.
 7. **A camera photo is a signal, not proof.** `capture` is a hint browsers may ignore and
    EXIF is editable. Moderation is what decides, and the app never claims otherwise.
-8. **Rainfall is one input among several.** Drain blockage, upstream release and
+8. **The report limit identifies a browser, not a person.** It stops accidental and casual
+   repetition. It does not stop anyone who clears their storage.
+9. **Rainfall is one input among several.** Drain blockage, upstream release and
    construction all cause flooding this model cannot see.
 
 ## Roadmap
@@ -689,8 +729,11 @@ Stated plainly, because a tool that overstates its confidence is worse than no t
 - [ ] Derive `drainage_capacity_score` from GMDA's published flow network instead of
       severity tier. The data is public: 4,701 stream segments with per-segment catchment areas
 - [ ] Verify the three coordinates the audit flagged (IFFCO Chowk, Rajiv Chowk, Sector 10A)
-- [ ] Rate-limit report submission at the edge. Today abuse is bounded by moderation and a
-      1 MB cap, not by a limiter
+- [x] Rate-limit reports per browser per place, so one road cannot be spammed while
+      reporting many roads stays easy
+- [x] Delete a report or a place outright, with a reason kept on the record
+- [ ] Rate-limit at the edge as well, by IP. PostgREST does not expose the client address
+      to a policy, so this needs an edge function in front of the insert
 - [ ] Per-user saved routes, so the daily commute is one tap
 - [ ] Ward-level contacts, so a verdict can end in an action and not just a warning
 

@@ -68,6 +68,10 @@ async function req<T>(path: string, init: RequestInit & { token?: string } = {})
         const body = await res.json();
         if (body?.message) detail = body.message;
         else if (body?.error_description) detail = body.error_description;
+        // Postgres RAISE carries the explanation in the hint, and for a
+        // rejected report that is the half worth reading: not just "you
+        // already reported this" but what to do instead.
+        if (body?.hint) detail = `${detail} ${body.hint}`;
       } catch {
         /* not JSON; the status line stands */
       }
@@ -132,6 +136,10 @@ export async function insertReport(row: {
   depth: string;
   note: string;
   photo_path: string | null;
+  /** Identifies the browser, never the person. See device.ts. The database
+   *  refuses a report without one rather than letting the limit be optional
+   *  for anyone who reads the source. */
+  device_id: string;
 }): Promise<void> {
   await req<void>('/rest/v1/reports', {
     method: 'POST',
@@ -322,4 +330,47 @@ export async function updatePlace(
     headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify(patch),
   });
+}
+
+/**
+ * Delete a report, permanently, with a reason kept on the record.
+ *
+ * There is no DELETE policy on the reports table and there is not going to
+ * be one: a leaked publishable key must not be able to erase what people
+ * reported. This goes through a function that checks the caller is an
+ * allowlisted moderator, refuses an empty reason, and writes the whole row
+ * into moderation_deletions before removing it.
+ */
+export async function deleteReport(id: string, reason: string, token: string): Promise<void> {
+  await req<void>('/rest/v1/rpc/delete_report', {
+    method: 'POST',
+    token,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_report: id, p_reason: reason }),
+  });
+}
+
+/** Delete a place and every report that made it. Same rules, same audit. */
+export async function deletePlace(id: string, reason: string, token: string): Promise<void> {
+  await req<void>('/rest/v1/rpc/delete_place', {
+    method: 'POST',
+    token,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_place: id, p_reason: reason }),
+  });
+}
+
+/**
+ * Remove a photo from the bucket.
+ *
+ * Deliberately called BEFORE the record is deleted. Supabase refuses direct
+ * SQL deletes on storage.objects (they orphan the file), so this has to come
+ * from here with the moderator's own token. If the browser dies between the
+ * two steps, the report survives pointing at a missing photo, which shows up
+ * in the queue and is fixed by deleting again. The other order would leave a
+ * photograph of somebody's street in the bucket with nothing in the database
+ * left to say it was ever there.
+ */
+export async function deletePhoto(path: string, token: string): Promise<void> {
+  await req<void>(`/storage/v1/object/${BUCKET}/${path}`, { method: 'DELETE', token });
 }

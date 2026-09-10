@@ -22,8 +22,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { notifyChange, photoUrl } from '../lib/reports';
 import {
-  RemoteError, isConfigured, listAllPlaces, listPending, listPlaceReports, listUnpaired,
-  setReportRainfall, setStatus, signIn, updatePlace,
+  RemoteError, deletePhoto, deletePlace, deleteReport, isConfigured, listAllPlaces,
+  listPending, listPlaceReports, listUnpaired, setReportRainfall, setStatus, signIn,
+  updatePlace,
   type ObservedPlace, type RemoteReport, type Session,
 } from '../lib/reports/remote';
 import { MATCH_RADIUS_M, metresBetween, rainfallBefore } from '../lib/engine/calibration';
@@ -180,6 +181,69 @@ export default function ModeratePanel({ onClose }: { onClose: () => void }) {
     }
   }
 
+  /**
+   * Delete a report for good.
+   *
+   * The photo goes first. Supabase refuses direct SQL deletes on storage, so
+   * it has to come from here, and doing it before the record means a crash in
+   * between leaves a visible broken report rather than an invisible orphaned
+   * photograph of somebody's street. If the photo delete fails the record is
+   * still removed, because that is what was asked for, and the moderator is
+   * told the file may remain instead of it going unmentioned.
+   */
+  async function removeReport(row: RemoteReport, reason: string) {
+    if (!session) return;
+    setBusy(true);
+    setError(null);
+    let photoLeftBehind = false;
+    try {
+      if (row.photo_path) {
+        try {
+          await deletePhoto(row.photo_path, session.access_token);
+        } catch {
+          photoLeftBehind = true;
+        }
+      }
+      await deleteReport(row.id, reason, session.access_token);
+      await load(session);
+      notifyChange();
+      if (photoLeftBehind) {
+        setError('The report is deleted. Its photo could not be removed from storage, so check the bucket.');
+      }
+    } catch (err) {
+      setError(err instanceof RemoteError ? err.message : 'Could not delete that report.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Delete a place and every report that made it. */
+  async function removePlace(place: ObservedPlace, reason: string) {
+    if (!session) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const rows = await listPlaceReports(place.id, session.access_token);
+      for (const r of rows) {
+        if (r.photo_path) {
+          try {
+            await deletePhoto(r.photo_path, session.access_token);
+          } catch {
+            /* Reported below by the record count not matching. Not worth
+               abandoning the deletion the moderator asked for. */
+          }
+        }
+      }
+      await deletePlace(place.id, reason, session.access_token);
+      await load(session);
+      notifyChange();
+    } catch (err) {
+      setError(err instanceof RemoteError ? err.message : 'Could not delete that place.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function editPlace(id: string, patch: Parameters<typeof updatePlace>[1]) {
     if (!session) return;
     setBusy(true);
@@ -290,7 +354,9 @@ export default function ModeratePanel({ onClose }: { onClose: () => void }) {
             </p>
           ) : (
             rows.map((r) => (
-              <ReportCard key={r.id} report={r} busy={busy} onReview={review} />
+              <ReportCard
+                key={r.id} report={r} busy={busy} onReview={review} onDelete={removeReport}
+              />
             ))
           )
         ) : (
@@ -300,9 +366,56 @@ export default function ModeratePanel({ onClose }: { onClose: () => void }) {
             busy={busy}
             token={session.access_token}
             onEdit={editPlace}
+            onDelete={removePlace}
+            onDeleteReport={removeReport}
           />
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Ask for a reason, inline.
+ *
+ * Every destructive action here needs one and none of them should reach for
+ * window.prompt(): a browser dialog blocks the page, ignores every style in
+ * this app, and Chrome suppresses it after a couple of uses in a row, which
+ * for a moderator working down a list is exactly when it would vanish.
+ */
+function ReasonBar({
+  placeholder, confirmLabel, tone, busy, onConfirm, onCancel,
+}: {
+  placeholder: string;
+  confirmLabel: string;
+  tone: 'warn' | 'danger';
+  busy: boolean;
+  onConfirm: (reason: string) => void;
+  onCancel: () => void;
+}) {
+  const [reason, setReason] = useState('');
+  const ready = reason.trim().length >= 3;
+
+  return (
+    <div className="place-edit reason-bar" data-tone={tone}>
+      <input
+        className="field field-grow"
+        autoFocus
+        maxLength={200}
+        placeholder={placeholder}
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') onCancel();
+          if (e.key === 'Enter' && ready) onConfirm(reason.trim());
+        }}
+      />
+      <button className="btn" disabled={busy || !ready} onClick={() => onConfirm(reason.trim())}>
+        {confirmLabel}
+      </button>
+      <button className="btn btn-ghost" disabled={busy} onClick={onCancel}>
+        Cancel
+      </button>
     </div>
   );
 }
@@ -312,12 +425,14 @@ export default function ModeratePanel({ onClose }: { onClose: () => void }) {
 // ---------------------------------------------------------------------------
 
 function ReportCard({
-  report: r, busy, onReview,
+  report: r, busy, onReview, onDelete,
 }: {
   report: RemoteReport;
   busy: boolean;
   onReview: (id: string, status: 'approved' | 'rejected') => void;
+  onDelete: (row: RemoteReport, reason: string) => void;
 }) {
+  const [deleting, setDeleting] = useState(false);
   return (
     <div className="report-card mod-card">
       {r.photo_path && (
@@ -360,7 +475,27 @@ function ReportCard({
         >
           Reject
         </button>
+        {/* Rejecting keeps the row and the photo, invisible to everyone but a
+            moderator, which is right for a report that is merely wrong.
+            Deleting is for one that should not be stored at all. */}
+        <button
+          className="btn btn-danger" disabled={busy || deleting}
+          onClick={() => setDeleting(true)}
+        >
+          Delete
+        </button>
       </div>
+
+      {deleting && (
+        <ReasonBar
+          tone="danger"
+          placeholder="Why delete it? Kept on the record, never shown publicly"
+          confirmLabel="Delete for good"
+          busy={busy}
+          onCancel={() => setDeleting(false)}
+          onConfirm={(reason) => { setDeleting(false); onDelete(r, reason); }}
+        />
+      )}
     </div>
   );
 }
@@ -370,13 +505,15 @@ function ReportCard({
 // ---------------------------------------------------------------------------
 
 function PlacesView({
-  places, counts, busy, token, onEdit,
+  places, counts, busy, token, onEdit, onDelete, onDeleteReport,
 }: {
   places: ObservedPlace[];
   counts: { promoted: number; gathering: number; hidden: number; measured: number };
   busy: boolean;
   token: string;
   onEdit: (id: string, patch: { label?: string | null; suppressed?: boolean; suppressed_reason?: string | null }) => void;
+  onDelete: (place: ObservedPlace, reason: string) => void;
+  onDeleteReport: (row: RemoteReport, reason: string) => void;
 }) {
   const live = places.filter((p) => p.report_count > 0 && !p.suppressed);
   const hidden = places.filter((p) => p.suppressed);
@@ -399,14 +536,20 @@ function PlacesView({
       ) : (
         <>
           {live.map((p) => (
-            <PlaceCard key={p.id} place={p} busy={busy} token={token} onEdit={onEdit} />
+            <PlaceCard
+              key={p.id} place={p} busy={busy} token={token}
+              onEdit={onEdit} onDelete={onDelete} onDeleteReport={onDeleteReport}
+            />
           ))}
 
           {hidden.length > 0 && (
             <>
               <div className="mod-sep">Hidden</div>
               {hidden.map((p) => (
-                <PlaceCard key={p.id} place={p} busy={busy} token={token} onEdit={onEdit} />
+                <PlaceCard
+                  key={p.id} place={p} busy={busy} token={token}
+                  onEdit={onEdit} onDelete={onDelete} onDeleteReport={onDeleteReport}
+                />
               ))}
             </>
           )}
@@ -434,18 +577,22 @@ function Stat({ n, label, hint }: { n: number; label: string; hint: string }) {
 }
 
 function PlaceCard({
-  place: p, busy, token, onEdit,
+  place: p, busy, token, onEdit, onDelete, onDeleteReport,
 }: {
   place: ObservedPlace;
   busy: boolean;
   token: string;
   onEdit: (id: string, patch: { label?: string | null; suppressed?: boolean; suppressed_reason?: string | null }) => void;
+  onDelete: (place: ObservedPlace, reason: string) => void;
+  onDeleteReport: (row: RemoteReport, reason: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [reports, setReports] = useState<RemoteReport[] | null>(null);
   const [name, setName] = useState(p.label ?? '');
-  /** Non-null while the hide reason is being typed. */
-  const [hiding, setHiding] = useState<string | null>(null);
+  /** Which destructive action is waiting for a reason, if any. */
+  const [asking, setAsking] = useState<'hide' | 'delete' | null>(null);
+  /** The report inside this place waiting for a delete reason. */
+  const [deletingReport, setDeletingReport] = useState<string | null>(null);
 
   useEffect(() => setName(p.label ?? ''), [p.label]);
 
@@ -553,49 +700,46 @@ function PlaceCard({
               </button>
             ) : (
               <button
-                className="btn btn-ghost" disabled={busy || hiding !== null}
-                onClick={() => setHiding('')}
+                className="btn btn-ghost" disabled={busy || asking !== null}
+                onClick={() => setAsking('hide')}
               >
                 Hide
               </button>
             )}
+            {/* Hiding is reversible and keeps the evidence. Deleting removes
+                the place, its reports and their photos, and cannot be undone.
+                They are different decisions, so they look different. */}
+            <button
+              className="btn btn-danger" disabled={busy || asking !== null}
+              onClick={() => setAsking('delete')}
+            >
+              Delete
+            </button>
           </div>
 
-          {/* Asked inline rather than through window.prompt().
-              A browser dialog blocks the page, ignores every style in this
-              app, and Chrome will suppress it outright after a couple of
-              uses, which for a moderator working through a list is exactly
-              when it would stop appearing. */}
-          {hiding !== null && (
-            <div className="place-edit place-hide">
-              <input
-                className="field field-grow"
-                autoFocus
-                maxLength={200}
-                placeholder="Why hide it? Kept on the record, never shown publicly"
-                value={hiding}
-                onChange={(e) => setHiding(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setHiding(null);
-                  if (e.key === 'Enter') {
-                    onEdit(p.id, { suppressed: true, suppressed_reason: hiding.trim() || null });
-                    setHiding(null);
-                  }
-                }}
-              />
-              <button
-                className="btn" disabled={busy}
-                onClick={() => {
-                  onEdit(p.id, { suppressed: true, suppressed_reason: hiding.trim() || null });
-                  setHiding(null);
-                }}
-              >
-                Hide it
-              </button>
-              <button className="btn btn-ghost" disabled={busy} onClick={() => setHiding(null)}>
-                Cancel
-              </button>
-            </div>
+          {asking === 'hide' && (
+            <ReasonBar
+              tone="warn"
+              placeholder="Why hide it? Kept on the record, never shown publicly"
+              confirmLabel="Hide it"
+              busy={busy}
+              onCancel={() => setAsking(null)}
+              onConfirm={(reason) => {
+                setAsking(null);
+                onEdit(p.id, { suppressed: true, suppressed_reason: reason });
+              }}
+            />
+          )}
+
+          {asking === 'delete' && (
+            <ReasonBar
+              tone="danger"
+              placeholder={`Why delete this place and its ${p.report_count} ${p.report_count === 1 ? 'report' : 'reports'}? This cannot be undone`}
+              confirmLabel="Delete for good"
+              busy={busy}
+              onCancel={() => setAsking(null)}
+              onConfirm={(reason) => { setAsking(null); onDelete(p, reason); }}
+            />
           )}
 
           {p.suppressed_reason && (
@@ -633,6 +777,29 @@ function PlaceCard({
                         : 'no rainfall attached'}
                     </div>
                     {r.note && <div className="place-report-note">{r.note}</div>}
+
+                    {deletingReport === r.id ? (
+                      <ReasonBar
+                        tone="danger"
+                        placeholder="Why delete this report? Kept on the record"
+                        confirmLabel="Delete for good"
+                        busy={busy}
+                        onCancel={() => setDeletingReport(null)}
+                        onConfirm={(reason) => {
+                          setDeletingReport(null);
+                          setReports(null);
+                          onDeleteReport(r, reason);
+                        }}
+                      />
+                    ) : (
+                      <button
+                        className="link-danger"
+                        disabled={busy}
+                        onClick={() => setDeletingReport(r.id)}
+                      >
+                        Delete this report
+                      </button>
+                    )}
                   </div>
                 </div>
               ))

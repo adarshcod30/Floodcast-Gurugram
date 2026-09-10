@@ -520,3 +520,208 @@ grant update (label, hotspot_id, suppressed, suppressed_reason)
 --
 --   update public.reports set status = status
 --    where status = 'approved' and place_id is null;
+
+-- ---------------------------------------------------------------------------
+-- Per-device, per-place cooldown
+-- ---------------------------------------------------------------------------
+--
+-- The limit people actually need is not "N reports per hour". Someone walking
+-- home past three flooded roads should file three reports and be thanked for
+-- it. What is worthless is the same person reporting the same puddle over and
+-- over. So the limit is scoped to (device, place).
+--
+-- WITH ONE EXCEPTION THAT MATTERS. Water gets deeper. Ankle deep at 5pm and
+-- knee deep at 6pm is not a duplicate, it is the most useful thing anyone can
+-- tell you, so a report of a WORSE depth is always allowed through.
+--
+-- HONEST LIMITATION. device_id identifies a browser, not a person. There is
+-- no login for reporters, on purpose, because requiring an account to say "this
+-- road is under water" would lose most of the reports worth having. Clearing
+-- site data, a private window, or posting straight to the API with a random
+-- uuid all get a fresh id. This is a civility limit: it stops a double-tapped
+-- submit button and casual repetition. Moderation is what stops anyone
+-- determined, and nothing in the interface claims otherwise.
+
+-- One depth ranking, replacing four copies of the same CASE expression.
+create or replace function public.depth_rank(d text)
+returns int language sql immutable as $$
+  select case d when 'impassable' then 4 when 'waist' then 3
+                when 'knee' then 2 when 'ankle' then 1 else 0 end
+$$;
+
+alter table public.reports
+  add column if not exists device_id uuid;
+
+create index if not exists reports_device_idx on public.reports (device_id, created_at desc);
+
+comment on column public.reports.device_id is
+  'Identifies the browser that filed this, not the person. A civility limit, not a security control.';
+
+create or replace function public.report_cooldown_hours()
+returns int language sql immutable as $$ select 6 $$;
+
+create or replace function public.enforce_report_cooldown()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare
+  window_hours int;
+  radius double precision;
+  worst_recent int;
+begin
+  -- A report that will not say which browser sent it cannot be rate limited,
+  -- and accepting it silently would make the limit optional for anyone who
+  -- reads the source. Refused with a reason instead.
+  if new.device_id is null then
+    raise exception 'device_id is required'
+      using hint = 'The app sends this automatically. It identifies the browser, never the person.';
+  end if;
+
+  select report_cooldown_hours() into window_hours;
+  select report_cluster_radius_m() into radius;
+
+  select max(depth_rank(depth)) into worst_recent
+  from public.reports
+  where device_id = new.device_id
+    and created_at > now() - make_interval(hours => window_hours)
+    and metres_between(lat, lon, new.lat, new.lon) <= radius;
+
+  if worst_recent is not null and depth_rank(new.depth) <= worst_recent then
+    raise exception 'You have already reported this place in the last % hours', window_hours
+      using hint = 'Report a different place, or come back if the water gets deeper.';
+  end if;
+
+  return new;
+end $function$;
+
+drop trigger if exists reports_check_cooldown on public.reports;
+create trigger reports_check_cooldown
+  before insert on public.reports
+  for each row execute function public.enforce_report_cooldown();
+
+-- ---------------------------------------------------------------------------
+-- Deletion, with a reason, on the record
+-- ---------------------------------------------------------------------------
+--
+-- Hiding is right for a place that might come back. It is wrong for a
+-- photograph that should not be stored at all, which is what deletion is for.
+--
+-- Deliberately NOT a DELETE policy. The tables still grant DELETE to nobody,
+-- so a leaked publishable key cannot erase what anyone reported. Removal
+-- happens through a function that demands an allowlisted moderator, demands a
+-- reason, and writes the whole row down before removing it. A deletion that
+-- leaves no trace of what was deleted is indistinguishable from one that never
+-- happened.
+
+create table if not exists public.moderation_deletions (
+  id           uuid primary key default gen_random_uuid(),
+  deleted_at   timestamptz not null default now(),
+  moderator    uuid not null references auth.users(id),
+  kind         text not null check (kind in ('report', 'place')),
+  subject_id   uuid not null,
+  reason       text not null check (length(trim(reason)) between 3 and 500),
+  snapshot     jsonb not null
+);
+
+alter table public.moderation_deletions enable row level security;
+
+drop policy if exists "moderators read the deletion log" on public.moderation_deletions;
+create policy "moderators read the deletion log"
+  on public.moderation_deletions for select
+  to authenticated
+  using (public.is_moderator());
+
+revoke insert, update, delete on public.moderation_deletions from anon, authenticated;
+
+-- NOTE ON PHOTOS. These functions do not touch storage, and cannot: Supabase
+-- guards storage.objects with a trigger that refuses direct SQL deletes,
+-- because removing the row orphans the file in the bucket. The photo goes
+-- through the Storage API from the moderator's browser, BEFORE this is called.
+-- If the browser dies in between, the report survives pointing at a missing
+-- photo, which is visible in the queue and fixed by deleting again. The other
+-- order would leave a photograph of somebody's street in the bucket with
+-- nothing left in the database to say it was ever there.
+
+create or replace function public.delete_report(p_report uuid, p_reason text)
+returns void
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare row_snapshot jsonb; the_place uuid;
+begin
+  if not public.is_moderator() then
+    raise exception 'Only a moderator can delete a report';
+  end if;
+  if p_reason is null or length(trim(p_reason)) < 3 then
+    raise exception 'A reason is required, and it is kept on the record';
+  end if;
+
+  select to_jsonb(r), r.place_id into row_snapshot, the_place
+  from public.reports r where r.id = p_report;
+
+  if row_snapshot is null then
+    raise exception 'No such report';
+  end if;
+
+  insert into public.moderation_deletions (moderator, kind, subject_id, reason, snapshot)
+  values (auth.uid(), 'report', p_report, trim(p_reason), row_snapshot);
+
+  delete from public.reports where id = p_report;
+
+  -- The place has one fewer report now, which can un-promote it or withdraw a
+  -- measured threshold. Recomputed rather than left stale.
+  if the_place is not null then
+    perform public.refresh_observed_place(the_place);
+  end if;
+end $function$;
+
+create or replace function public.delete_place(p_place uuid, p_reason text)
+returns void
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+declare place_snapshot jsonb;
+begin
+  if not public.is_moderator() then
+    raise exception 'Only a moderator can delete a place';
+  end if;
+  if p_reason is null or length(trim(p_reason)) < 3 then
+    raise exception 'A reason is required, and it is kept on the record';
+  end if;
+
+  -- The place and every report that made it, in one snapshot, because
+  -- deleting a place deletes its evidence with it.
+  select jsonb_build_object(
+           'place', to_jsonb(p),
+           'reports', coalesce((select jsonb_agg(to_jsonb(r))
+                                from public.reports r where r.place_id = p.id), '[]'::jsonb))
+    into place_snapshot
+  from public.observed_places p where p.id = p_place;
+
+  if place_snapshot is null then
+    raise exception 'No such place';
+  end if;
+
+  insert into public.moderation_deletions (moderator, kind, subject_id, reason, snapshot)
+  values (auth.uid(), 'place', p_place, trim(p_reason), place_snapshot);
+
+  delete from public.reports where place_id = p_place;
+  delete from public.observed_places where id = p_place;
+end $function$;
+
+revoke execute on function public.delete_report(uuid, text) from public, anon;
+revoke execute on function public.delete_place(uuid, text) from public, anon;
+grant execute on function public.delete_report(uuid, text) to authenticated;
+grant execute on function public.delete_place(uuid, text) to authenticated;
+
+-- A moderator may remove a photo through the Storage API. Nobody else can:
+-- anon holds insert and select on this bucket and nothing more.
+drop policy if exists "moderators delete report photos" on storage.objects;
+create policy "moderators delete report photos"
+  on storage.objects for delete
+  to authenticated
+  using (bucket_id = 'report-photos' and public.is_moderator());

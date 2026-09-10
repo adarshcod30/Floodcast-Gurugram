@@ -149,6 +149,14 @@ export default function ReportPanel() {
           the project can produce that number.
         </div>
 
+        <div className="note">
+          <b>One report per place, per six hours.</b> Report as many different roads as
+          you pass, but not the same one repeatedly, because the second report of the
+          same puddle adds nothing and the third crowds out somebody else's. The one
+          exception is water getting deeper: if you said ankle deep and it is now knee
+          deep, say so, because that is the most useful thing anyone can tell us.
+        </div>
+
         {shared ? (
           <div className="note">
             <b>Nothing you file appears publicly until it is reviewed.</b> Your report is
