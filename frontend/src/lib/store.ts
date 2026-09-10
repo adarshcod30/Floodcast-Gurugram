@@ -25,6 +25,7 @@ import { fetchForecast, GURUGRAM, type Forecast } from './engine/weather';
 import { fetchAirQuality, type AqiResult } from './engine/aqi';
 import { analyzeRoute, ROUTE_DISCLAIMER, ROUTING_METHOD } from './engine/route';
 import { geocode, resolveInQuery, type Place } from './engine/places';
+import type { ThresholdOverride } from './engine/calibration';
 
 import type {
   Attraction, ChatResponse, ForecastResponse, Hotspot,
@@ -33,6 +34,50 @@ import type {
 
 export const HOTSPOTS = hotspotsRaw as HotspotRow[];
 export const ATTRACTIONS = attractionsRaw as Attraction[];
+
+/**
+ * What the model currently believes, which is no longer what shipped.
+ *
+ * Every rainfall threshold in hotspots.json is an engineering estimate
+ * assigned by severity tier, because no published source gives the real
+ * number. Citizen reports produce real numbers: a place, a time, a depth,
+ * and the rainfall that fell before it. Once a place has been seen flooding
+ * on two separate days, the database publishes the lightest rain that did
+ * it, and this is where that measurement replaces the estimate.
+ *
+ * Held as module state rather than passed around because it is a belief, not
+ * a parameter. The forecast scoring, the simulator and the register all have
+ * to read the same one, and a threshold that differs between the map and the
+ * what-if slider is a bug waiting to be shipped.
+ */
+let calibration = new Map<string, ThresholdOverride>();
+let register: HotspotRow[] = HOTSPOTS;
+
+/**
+ * Fold new measurements into the register. Returns whether anything moved,
+ * so a caller can avoid rescoring when the answer cannot have changed.
+ */
+export function applyCalibration(next: Map<string, ThresholdOverride>): boolean {
+  const unchanged =
+    next.size === calibration.size &&
+    [...next].every(([id, o]) => calibration.get(id)?.mm_hr === o.mm_hr);
+  if (unchanged) return false;
+
+  calibration = next;
+  register =
+    next.size === 0
+      ? HOTSPOTS
+      : HOTSPOTS.map((h) => {
+          const o = next.get(h.hotspot_id);
+          return o ? { ...h, rainfall_threshold_mm_per_hr: o.mm_hr } : h;
+        });
+  return true;
+}
+
+/** How many of the register's thresholds are measured rather than estimated. */
+export function calibratedCount(): number {
+  return calibration.size;
+}
 
 /** How many hours the scrubber covers. */
 const TIMELINE_HOURS = 12;
@@ -85,6 +130,7 @@ function toHotspot(row: HotspotRow, risk: Risk | undefined): Hotspot {
     intensity_ratio: risk?.intensity_ratio ?? 0,
     forecast_intensity_mm_hr: risk?.forecast_intensity_mm_hr ?? 0,
     threshold_mm_hr: risk?.threshold_mm_hr ?? row.rainfall_threshold_mm_per_hr,
+    threshold_observed: calibration.get(row.hotspot_id) ?? null,
 
     // Passed straight through to the UI. Never read by the scoring above.
     gmda_drain_area_sq_km: row.gmda_drain_area_sq_km ?? null,
@@ -124,7 +170,7 @@ function framesToResponse(frames: Frame[]): TimelineFrame[] {
  */
 export async function loadSnapshot(): Promise<Snapshot> {
   const forecast = await fetchForecast(GURUGRAM.lat, GURUGRAM.lon);
-  const frames = projectTimeline(HOTSPOTS, forecast.windows, TIMELINE_HOURS);
+  const frames = projectTimeline(register, forecast.windows, TIMELINE_HOURS);
 
   // Hour zero is "now", so that is what the headline figures describe.
   const nowRisks = new Map<string, Risk>();
@@ -133,7 +179,7 @@ export async function loadSnapshot(): Promise<Snapshot> {
   }
 
   return {
-    hotspots: HOTSPOTS.map((h) => toHotspot(h, nowRisks.get(h.hotspot_id))),
+    hotspots: register.map((h) => toHotspot(h, nowRisks.get(h.hotspot_id))),
     attractions: ATTRACTIONS,
     frames: framesToResponse(frames),
     forecast: toForecastResponse(forecast),
@@ -172,7 +218,7 @@ export function simulate(mmPerHr: number, hours = TIMELINE_HOURS): TimelineFrame
     description: 'Simulated rainfall',
   }));
 
-  return framesToResponse(projectTimeline(HOTSPOTS, windows, hours, now));
+  return framesToResponse(projectTimeline(register, windows, hours, now));
 }
 
 // ---------------------------------------------------------------------------

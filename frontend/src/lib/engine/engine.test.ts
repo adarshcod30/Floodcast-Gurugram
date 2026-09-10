@@ -27,6 +27,8 @@ import { computeAqi, subIndex } from './aqi';
 import { haversineKm, pointToSegmentKm, findCorridorHotspots } from './route';
 import { resolveInQuery, resolveLocal, similarity } from './places';
 import { parseForecast } from './weather';
+import { MATCH_RADIUS_M, metresBetween, thresholdOverrides } from './calibration';
+import { applyCalibration, HOTSPOTS, simulate } from '../store';
 
 const rows = hotspots as HotspotRow[];
 const find = (name: string) => rows.find((h) => h.name === name)!;
@@ -451,5 +453,96 @@ describe('CPCB AQI', () => {
     expect(result).not.toBeNull();
     expect(result.aqi).toBe(Math.max(...Object.values(result.subIndices)));
     expect(result.dominant).toBe('pm2_5');
+  });
+});
+
+describe('calibration from reports', () => {
+  const place = (
+    lat: number,
+    lon: number,
+    mm: number | null,
+    pairs = 3,
+    days = 2,
+  ) => ({
+    lat,
+    lon,
+    observed_threshold_mm_hr: mm,
+    calibration_pairs: pairs,
+    threshold_days: days,
+  });
+
+  const REGISTER = [
+    { hotspot_id: 'H1', latitude: 28.4600, longitude: 77.0300 },
+    { hotspot_id: 'H2', latitude: 28.5000, longitude: 77.1000 },
+  ];
+
+  it('measures distance the same way the database does', () => {
+    // One degree of latitude is close to 111 km anywhere on Earth, which is
+    // the check that catches a radians-versus-degrees slip.
+    expect(metresBetween(28.46, 77.03, 29.46, 77.03)).toBeGreaterThan(110_000);
+    expect(metresBetween(28.46, 77.03, 29.46, 77.03)).toBeLessThan(112_000);
+    expect(metresBetween(28.46, 77.03, 28.46, 77.03)).toBe(0);
+  });
+
+  it('attaches a measured threshold to the hotspot it is standing at', () => {
+    const out = thresholdOverrides([place(28.4601, 77.0301, 18)], REGISTER);
+    expect(out.get('H1')?.mm_hr).toBe(18);
+    expect(out.has('H2')).toBe(false);
+  });
+
+  it('ignores a place that is nowhere near the register', () => {
+    // Roughly 5 km out. A real flood point, but not this hotspot's evidence.
+    const out = thresholdOverrides([place(28.5100, 77.0300, 18)], REGISTER);
+    expect(out.size).toBe(0);
+  });
+
+  it('never publishes a threshold that has not been measured', () => {
+    // Reports exist and pairs are being collected, but the two-day rule has
+    // not been met, so the database left the number null and so must this.
+    const out = thresholdOverrides([place(28.4601, 77.0301, null, 4, 1)], REGISTER);
+    expect(out.size).toBe(0);
+  });
+
+  it('prefers the nearer place when two describe the same hotspot', () => {
+    const near = place(28.4601, 77.0301, 22);
+    const far = place(28.4630, 77.0330, 9);
+    expect(thresholdOverrides([near, far], REGISTER).get('H1')?.mm_hr).toBe(22);
+    expect(thresholdOverrides([far, near], REGISTER).get('H1')?.mm_hr).toBe(22);
+  });
+
+  it('matches within the same radius the database clusters within', () => {
+    // A place either lands on a known hotspot or starts a new one. If these
+    // two numbers ever drift apart, a report can do both or neither.
+    expect(MATCH_RADIUS_M).toBe(500);
+  });
+
+  it('rescores the register against a measured threshold', () => {
+    const target = HOTSPOTS[0];
+    const measured = target.rainfall_threshold_mm_per_hr / 2;
+    // Rain the shipped estimate calls harmless here, and the measurement
+    // calls flooding. The whole feature lives in that gap.
+    const rain = measured + 0.5;
+    const scoreFor = () =>
+      simulate(rain)[0].risks.find((r) => r.hotspot_id === target.hotspot_id)?.risk_score ?? -1;
+
+    expect(scoreFor()).toBe(0);
+
+    const changed = applyCalibration(
+      new Map([[target.hotspot_id, { mm_hr: measured, pairs: 3, days: 2, metres_away: 40 }]]),
+    );
+    expect(changed).toBe(true);
+    expect(scoreFor()).toBeGreaterThan(0);
+
+    // Applying the same measurement twice is not a change, so nothing above
+    // this has to rescore on every poll.
+    expect(
+      applyCalibration(
+        new Map([[target.hotspot_id, { mm_hr: measured, pairs: 3, days: 2, metres_away: 40 }]]),
+      ),
+    ).toBe(false);
+
+    // Leave the module as it was found: other tests read the shipped values.
+    expect(applyCalibration(new Map())).toBe(true);
+    expect(scoreFor()).toBe(0);
   });
 });

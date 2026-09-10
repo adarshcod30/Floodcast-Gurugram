@@ -27,12 +27,14 @@ import Simulate from './components/Simulate';
 import Verdict from './components/Verdict';
 import { clock, hourLabel } from './lib/display';
 import {
-  communityReports, isConfigured as reportsShared, onChange as onReportChange,
-  type RemoteReport,
+  communityReports, isConfigured as reportsShared, observedPlaces,
+  onChange as onReportChange, type ObservedPlace, type RemoteReport,
 } from './lib/reports';
 import {
-  ATTRACTIONS, HOTSPOTS, loadAirQuality, loadSnapshot, simulate, type Snapshot,
+  applyCalibration, ATTRACTIONS, HOTSPOTS, loadAirQuality, loadSnapshot, simulate,
+  type Snapshot,
 } from './lib/store';
+import { thresholdOverrides } from './lib/engine/calibration';
 import type { AqiResult } from './lib/engine/aqi';
 import type { Hotspot, RiskLevel, TimeWindow } from './types';
 
@@ -73,6 +75,8 @@ export default function App() {
   const [simulated, setSimulated] = useState<number | null>(null);
   /** Approved citizen reports from the last 12 hours. */
   const [community, setCommunity] = useState<RemoteReport[]>([]);
+  /** Places the reports themselves have identified. */
+  const [places, setPlaces] = useState<ObservedPlace[]>([]);
 
   /** Whether the hour scrubber and simulator are expanded. Remembered,
    *  because someone who wants the map full-height wants it every visit,
@@ -107,6 +111,16 @@ export default function App() {
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
+      // Reports first. Anything they have measured since the last load has
+      // to be folded into the register before the forecast is scored against
+      // it, or the map would show today's rain against last week's beliefs.
+      // One extra round trip, and never a blocking one: the register and the
+      // map are already on screen from the bundle, and a Supabase that is
+      // unreachable or unconfigured just leaves the estimates in place.
+      const seen = await observedPlaces().catch(() => [] as ObservedPlace[]);
+      setPlaces(seen);
+      applyCalibration(thresholdOverrides(seen, HOTSPOTS));
+
       setSnapshot(await loadSnapshot());
     } finally {
       setRefreshing(false);
@@ -127,10 +141,17 @@ export default function App() {
   // Approved reports are observations, and they belong next to the model
   // everywhere the model is shown, not filed away on their own tab.
   useEffect(() => {
-    const pull = () => void communityReports().then(setCommunity).catch(() => setCommunity([]));
+    const pull = () => {
+      void communityReports().then(setCommunity).catch(() => setCommunity([]));
+    };
     pull();
-    return onReportChange(pull);
-  }, []);
+    // An approved report can change the answer, not just the pin count, so
+    // a change rescores everything rather than only refreshing the list.
+    return onReportChange(() => {
+      pull();
+      void load();
+    });
+  }, [load]);
 
   // A simulation replaces the frames outright rather than merging into
   // them, so there is never a view that is half hypothetical and half real.
@@ -311,6 +332,7 @@ export default function App() {
               hotspots={hotspots}
               attractions={ATTRACTIONS}
               reports={community}
+              places={places}
               riskAt={riskAt}
               showLandmarks={showLandmarks}
               showWatchlist={showWatchlist}
@@ -322,7 +344,12 @@ export default function App() {
           {tab === 'ask' && <AskPanel snapshot={snapshot} />}
           {tab === 'report' && <ReportPanel />}
           {tab === 'about' && (
-            <AboutPanel hotspots={hotspots} forecast={forecast} aqiBasis={aqi?.basis ?? null} />
+            <AboutPanel
+              hotspots={hotspots}
+              forecast={forecast}
+              aqiBasis={aqi?.basis ?? null}
+              places={places}
+            />
           )}
         </main>
       </div>

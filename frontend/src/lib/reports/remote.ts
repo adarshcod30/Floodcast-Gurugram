@@ -34,6 +34,10 @@ export interface RemoteReport {
   note: string | null;
   photo_path: string | null;
   status: 'pending' | 'approved' | 'rejected';
+  place_id?: string | null;
+  rain_peak_mm_hr?: number | null;
+  rain_total_mm?: number | null;
+  rain_window_hr?: number | null;
 }
 
 function headers(token?: string): Record<string, string> {
@@ -183,4 +187,88 @@ export async function setStatus(
     headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ status, reviewed_at: new Date().toISOString() }),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Observed places: what the reports have taught the tool
+// ---------------------------------------------------------------------------
+
+export interface ObservedPlace {
+  id: string;
+  lat: number;
+  lon: number;
+  hotspot_id: string | null;
+  label: string | null;
+  report_count: number;
+  distinct_days: number;
+  worst_depth: string | null;
+  first_seen: string | null;
+  last_seen: string | null;
+  promoted: boolean;
+  promoted_at: string | null;
+  /** The lightest rain ever seen to put knee-deep water here, in mm/hr.
+   *  Null until reports on two separate days have measured it. Computed in
+   *  SQL by refresh_observed_place, never in the browser: the database has
+   *  every report, this app only sees the last twelve hours. */
+  observed_threshold_mm_hr: number | null;
+  /** Reports behind that number, and the separate days they came from. */
+  calibration_pairs: number;
+  threshold_days: number;
+}
+
+/**
+ * Places that citizen reports have identified.
+ *
+ * Derived entirely from approved reports, so this is public. A place with
+ * `promoted` true has cleared the corroboration rule (see
+ * supabase/schema.sql) and is shown alongside the 73 sourced points with
+ * its own provenance, never merged into theirs.
+ */
+export async function listObservedPlaces(): Promise<ObservedPlace[]> {
+  return req<ObservedPlace[]>(
+    '/rest/v1/observed_places?select=*&report_count=gt.0&order=report_count.desc&limit=500',
+  );
+}
+
+/** Approved reports belonging to one place, for the calibration pairs. */
+export async function listPlaceReports(placeId: string): Promise<RemoteReport[]> {
+  return req<RemoteReport[]>(
+    `/rest/v1/reports?select=*&place_id=eq.${encodeURIComponent(placeId)}` +
+      '&status=eq.approved&order=created_at.desc&limit=200',
+  );
+}
+
+/**
+ * Attach the rainfall that fell before a report.
+ *
+ * Written by the moderator's browser at approval time, which is the one
+ * moment someone is already looking at the report and online. Requires a
+ * signed-in moderator, because the reports table only accepts updates from
+ * one.
+ */
+export async function setReportRainfall(
+  id: string,
+  rain: { peak_mm_hr: number; total_mm: number; window_hr: number; source: string },
+  token: string,
+): Promise<void> {
+  await req(`/rest/v1/reports?id=eq.${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    token,
+    headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      rain_peak_mm_hr: rain.peak_mm_hr,
+      rain_total_mm: rain.total_mm,
+      rain_window_hr: rain.window_hr,
+      rain_source: rain.source,
+    }),
+  });
+}
+
+/** Approved reports that still have no rainfall attached, for backfill. */
+export async function listUnpaired(token: string): Promise<RemoteReport[]> {
+  return req<RemoteReport[]>(
+    '/rest/v1/reports?select=*&status=eq.approved&rain_peak_mm_hr=is.null' +
+      '&order=created_at.desc&limit=50',
+    { token },
+  );
 }

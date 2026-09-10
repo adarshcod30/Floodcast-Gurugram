@@ -17,6 +17,7 @@ import type { PreparedPhoto } from './image';
 
 export { preparePhoto, previewUrl, PhotoError, type PreparedPhoto } from './image';
 export { isConfigured, photoUrl } from './remote';
+export type { ObservedPlace } from './remote';
 export type { QueuedReport } from './db';
 export type { RemoteReport } from './remote';
 
@@ -230,4 +231,15 @@ export async function communityReports(): Promise<remote.RemoteReport[]> {
 // Upload whatever is waiting as soon as the network comes back.
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => void sync());
+}
+
+/** Places citizen reports have identified, promoted or not. Empty when
+ *  sharing is off, so the map simply shows nothing extra. */
+export async function observedPlaces(): Promise<remote.ObservedPlace[]> {
+  if (!remote.isConfigured()) return [];
+  try {
+    return await remote.listObservedPlaces();
+  } catch {
+    return [];
+  }
 }

@@ -14,7 +14,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { photoUrl } from '../lib/reports';
-import { RemoteError, listPending, setStatus, signIn, isConfigured, type RemoteReport, type Session } from '../lib/reports/remote';
+import {
+  RemoteError, isConfigured, listPending, listUnpaired, setReportRainfall, setStatus, signIn,
+  type RemoteReport, type Session,
+} from '../lib/reports/remote';
+import { rainfallBefore } from '../lib/engine/calibration';
 import { DEPTHS } from '../lib/reports';
 
 const SESSION_KEY = 'floodcast.moderator';
@@ -33,6 +37,7 @@ export default function ModeratePanel({ onClose }: { onClose: () => void }) {
   const [rows, setRows] = useState<RemoteReport[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paired, setPaired] = useState<{ done: number; total: number } | null>(null);
 
   const load = useCallback(async (s: Session) => {
     setError(null);
@@ -46,9 +51,28 @@ export default function ModeratePanel({ onClose }: { onClose: () => void }) {
     }
   }, []);
 
+  /** Fill in rainfall for anything approved earlier without it. */
+  const backfill = useCallback(async (s: Session) => {
+    try {
+      const missing = await listUnpaired(s.access_token);
+      setPaired({ done: 0, total: missing.length });
+      let done = 0;
+      for (const row of missing) {
+        const rain = await rainfallBefore(row.lat, row.lon, new Date(row.created_at));
+        if (rain) await setReportRainfall(row.id, rain, s.access_token);
+        done += 1;
+        setPaired({ done, total: missing.length });
+      }
+    } catch {
+      /* Best effort. */
+    }
+  }, []);
+
   useEffect(() => {
-    if (session) void load(session);
-  }, [session, load]);
+    if (!session) return;
+    void load(session);
+    void backfill(session);
+  }, [session, load, backfill]);
 
   async function submitLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -74,10 +98,32 @@ export default function ModeratePanel({ onClose }: { onClose: () => void }) {
     try {
       await setStatus(id, status, session.access_token);
       setRows((r) => r.filter((x) => x.id !== id));
+
+      // Approving is the moment this report becomes evidence, so it is also
+      // the moment to attach the rainfall that caused it. Half the pair came
+      // from the reporter (a place, a time, an observed depth); this fetches
+      // the other half. Deliberately after the status write and deliberately
+      // not awaited into the failure path: if Open-Meteo is unreachable the
+      // report is still approved, and the pair is backfilled next time this
+      // queue is opened.
+      if (status === 'approved') {
+        const row = rows.find((x) => x.id === id);
+        if (row) void pairRainfall(row, session.access_token);
+      }
     } catch (err) {
       setError(err instanceof RemoteError ? err.message : 'Could not update that report.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** Attach the rainfall that fell before a report. Never throws. */
+  async function pairRainfall(row: RemoteReport, token: string): Promise<void> {
+    try {
+      const rain = await rainfallBefore(row.lat, row.lon, new Date(row.created_at));
+      if (rain) await setReportRainfall(row.id, rain, token);
+    } catch {
+      /* Backfilled later. A missing pair is not worth failing an approval. */
     }
   }
 
@@ -103,6 +149,15 @@ export default function ModeratePanel({ onClose }: { onClose: () => void }) {
       <div className="pad stack">
         {error && (
           <div className="note" style={{ borderLeftColor: 'var(--imd-red)' }}>{error}</div>
+        )}
+
+        {paired && paired.total > 0 && (
+          <div className="note">
+            <b>Pairing rainfall with {paired.total} earlier {paired.total === 1 ? 'report' : 'reports'}.</b>{' '}
+            {paired.done} of {paired.total} done. Each pair is a real measurement of how much
+            rain that place took before it flooded, which is what eventually replaces the
+            estimated thresholds.
+          </div>
         )}
 
         {!session ? (

@@ -43,6 +43,11 @@ export interface Hotspot {
   intensity_ratio: number;
   forecast_intensity_mm_hr: number;
   threshold_mm_hr: number;
+  /** Present when threshold_mm_hr was measured from citizen reports rather
+   *  than estimated from severity tier. The counts travel with it so no
+   *  screen can show a measured number without showing how thin or thick
+   *  the evidence behind it is. */
+  threshold_observed?: { pairs: number; days: number; metres_away: number } | null;
 
   /** Measured drainage facts from GMDA's published network. Evidence only:
    *  deliberately not an input to any score. */
