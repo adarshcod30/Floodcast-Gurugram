@@ -1,9 +1,9 @@
 /**
  * Supabase adapter, over plain fetch.
  *
- * The official client is about 30 KB gzipped and this app is 77 KB in total,
- * so pulling it in for four endpoints would be a bad trade. Supabase's REST
- * surface is PostgREST plus a storage API, both ordinary HTTP.
+ * The official client is about 30 KB gzipped, which is a fifth of this whole
+ * app, so pulling it in for a handful of endpoints would be a bad trade.
+ * Supabase's REST surface is PostgREST plus a storage API, both ordinary HTTP.
  *
  * The anon key is public by design and safe in the bundle: every rule that
  * matters is enforced by row level security in Postgres, not here. See
