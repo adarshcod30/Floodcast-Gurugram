@@ -99,6 +99,18 @@ What gets published is deliberately a weak claim: the **lightest rain ever actua
 
 The rules live in [`supabase/schema.sql`](supabase/schema.sql) (`report_cluster_radius_m`, `promotion_rule`, `calibration_rule`, `refresh_observed_place`) and the browser half in [`frontend/src/lib/engine/calibration.ts`](frontend/src/lib/engine/calibration.ts).
 
+**What a moderator can and cannot do.** The review screen has two tabs: a queue that decides what the public sees, and a Places tab that shows every spot the reports have found, what it is doing to the model, and the reports behind it. A moderator can name a place, tie it to a register point, or hide one that turns out to be junk. Hiding sits on top of the rule rather than replacing it, so restoring a place brings back whatever its reports actually support.
+
+What a moderator explicitly **cannot** do is type in a measurement. `report_count`, `calibration_pairs` and `observed_threshold_mm_hr` are writable only by the database trigger, enforced by column grants:
+
+```sql
+revoke update on public.observed_places from anon, authenticated;
+grant update (label, hotspot_id, suppressed, suppressed_reason)
+  on public.observed_places to authenticated;
+```
+
+Row level security decides which rows; only column grants decide which columns. Without that second line a signed-in moderator could PATCH a threshold straight through PostgREST and manufacture a measurement nobody observed. So a number marked `measured` on this map is always something people actually stood in.
+
 ### Every coordinate is approximate
 
 No geocoding API placed these points. They are best-effort positions from Gurugram's sector layout and road network. `coordinates_verified` is `No` for all 73 rows, on purpose, as a standing reminder. [`scripts/verify_coordinates.py`](scripts/verify_coordinates.py) audits them against OpenStreetMap and writes a review report. It never edits the data.

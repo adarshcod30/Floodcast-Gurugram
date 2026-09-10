@@ -361,6 +361,16 @@ runs in the browser, because the register lives in the app bundle and copying
 one. Both use the same haversine and the same 500 m, and a test asserts the
 two radii stay equal.
 
+**What a moderator may change.** A place can be named, tied to a register
+point, or hidden. Hiding is reversible and sits on top of the rule, so an
+unsuppressed place returns to whatever its reports support rather than to
+whatever they supported on the day it was hidden. The aggregates and the
+observed threshold are not editable by anybody: they are written by
+`refresh_observed_place` alone, and PostgREST is prevented from touching them
+by column grants rather than by the moderation screen. Row level security
+decides which rows a moderator may write; only column grants decide which
+columns. A number labelled `measured` therefore always traces back to reports.
+
 **Standing limitation.** Report counts measure attention, not severity. A busy
 road full of commuters with phones will out-report a worse but quieter road,
 so count drives *confidence* here and never colour. Colour is always the worst
