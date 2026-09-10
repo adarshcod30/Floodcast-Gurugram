@@ -266,9 +266,14 @@ export async function setReportRainfall(
 
 /** Approved reports that still have no rainfall attached, for backfill. */
 export async function listUnpaired(token: string): Promise<RemoteReport[]> {
+  // Bounded to the last week on purpose. Open-Meteo's forecast endpoint only
+  // carries seven days of past hours, so a report older than that can never
+  // be paired, and without this bound every visit to the queue would refetch
+  // the same hopeless backlog forever, growing with the corpus.
+  const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
   return req<RemoteReport[]>(
     '/rest/v1/reports?select=*&status=eq.approved&rain_peak_mm_hr=is.null' +
-      '&order=created_at.desc&limit=50',
+      `&created_at=gte.${since}&order=created_at.desc&limit=50`,
     { token },
   );
 }
