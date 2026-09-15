@@ -39,7 +39,6 @@ backend/var/
 # ── Editors & OS ────────────────────────────────────────────────────
 # Local editor and tooling configuration. Ports and dev-server commands
 # for one machine, not something anyone cloning this needs.
-.claude/
 .DS_Store
 Thumbs.db
 .idea/
@@ -51,12 +50,6 @@ Thumbs.db
 *.log
 npm-debug.log*
 yarn-error.log*
-
-# local agent and editor files, never committed
-.claude.json
-CLAUDE.local.md
-CLAUDE.md
-AGENTS.md
 
 # secrets, build output and local noise
 .env.local
