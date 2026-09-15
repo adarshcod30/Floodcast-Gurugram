@@ -55,3 +55,8 @@ yarn-error.log*
 .env.local
 build/
 .next/
+
+# test and type-checker artefacts
+coverage/
+*.tsbuildinfo
+.turbo/
